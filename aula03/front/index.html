@@ -1,4 +1,5 @@
 <html>
+    <div id="topAlert" class="top-alert"></div>
     <div>
         <h1>Dashboard da Calculadora</h1>
         <div class="operands">
@@ -58,10 +59,39 @@
     button:hover {
         background-color: #0056b3;
     }
+
+    .top-alert {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        display: none;
+        padding: 12px 16px;
+        text-align: center;
+        font-weight: 600;
+        color: #fff;
+        background-color: #c62828;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .top-alert.show {
+        display: block;
+    }
 </style>
 
 <script>
-    function sendCalcRequest(op) {
+    function showTopAlert(message) {
+        const alertBox = document.getElementById('topAlert');
+        alertBox.textContent = message;
+        alertBox.classList.add('show');
+    }
+
+    function hideTopAlert() {
+        document.getElementById('topAlert').classList.remove('show');
+    }
+
+    async function sendCalcRequest(op) {
         const a = document.getElementById('operandA').value.trim();
         const b = document.getElementById('operandB').value.trim();
 
@@ -70,8 +100,27 @@
             return;
         }
 
+        hideTopAlert();
+
         const url = `http://192.168.4.1/calc?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&op=${encodeURIComponent(op)}`;
-        window.location.href = url;
+
+        try {
+            const response = await fetch(url);
+            const responseBody = await response.text();
+            const normalizedBody = responseBody.toLowerCase();
+            const isOverflow = response.status === 400;
+
+            if (!response.ok || isOverflow) {
+                if (isOverflow) {
+                    showTopAlert('Overflow detectado na operacao.');
+                    return;
+                }
+
+                showTopAlert(`Erro na requisicao (codigo ${response.status}).`);
+            }
+        } catch (error) {
+            showTopAlert('Falha ao conectar com a calculadora em 192.168.4.1.');
+        }
     }
 
     document.getElementById('add').addEventListener('click', function() {
