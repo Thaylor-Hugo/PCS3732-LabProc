@@ -1,5 +1,84 @@
 <html>
     <div>
-        <h1>Olá, mundo!</h1>
+        <h1>Dashboard da Calculadora</h1>
+        <div class="operands">
+            <p>Operando A: </p>
+            <input type="text" placeholder="Digite um número em binário" id="operandA" maxlength="4">
+        </div>
+        <div class="operands">
+            <p>Operando B: </p>
+            <input type="text" placeholder="Digite um número em binário" id="operandB" maxlength="4">
+        </div>
+        <div>
+            <button id="add">Adicionar</button>
+            <button id="sub">Subtrair</button>
+        </div>
     </div>
 </html>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    div {
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .operands {
+        margin-bottom: 15px;
+    }
+
+    input {
+        width: 100%;
+        padding: 8px;
+        margin-top: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    button {
+        padding: 10px 20px;
+        margin-right: 10px;
+        border: none;
+        border-radius: 4px;
+        background-color: #007BFF;
+        color: white;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background-color: #0056b3;
+    }
+</style>
+
+<script>
+    function sendCalcRequest(op) {
+        const a = document.getElementById('operandA').value.trim();
+        const b = document.getElementById('operandB').value.trim();
+
+        if (!/^[01]{1,4}$/.test(a) || !/^[01]{1,4}$/.test(b)) {
+            alert('Digite apenas numeros binarios de ate 4 bits nos dois operandos.');
+            return;
+        }
+
+        const url = `http://192.168.4.1/calc?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&op=${encodeURIComponent(op)}`;
+        window.location.href = url;
+    }
+
+    document.getElementById('add').addEventListener('click', function() {
+        sendCalcRequest('add');
+    });
+
+    document.getElementById('sub').addEventListener('click', function() {
+        sendCalcRequest('sub');
+    });
+</script>
