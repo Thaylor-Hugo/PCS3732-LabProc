@@ -1,18 +1,30 @@
 <html>
     <div id="topAlert" class="top-alert"></div>
-    <div>
+    <div class="card">
         <h1>Dashboard da Calculadora</h1>
-        <div class="operands">
-            <p>Operando A: </p>
-            <input type="text" placeholder="Digite um número em binário" id="operandA" maxlength="4">
-            <div id="operandAError" class="input-error"></div>
+        <div class="operands-grid">
+            <div class="operands">
+                <p>Operando A: </p>
+                <div class="operand-row">
+                    <div class="input-column">
+                        <input type="text" placeholder="Digite um número em binário" id="operandA" maxlength="4">
+                        <div id="operandAError" class="input-error"></div>
+                    </div>
+                    <div id="operandADecimal" class="decimal-preview">Decimal: -</div>
+                </div>
+            </div>
+            <div class="operands">
+                <p>Operando B: </p>
+                <div class="operand-row">
+                    <div class="input-column">
+                        <input type="text" placeholder="Digite um número em binário" id="operandB" maxlength="4">
+                        <div id="operandBError" class="input-error"></div>
+                    </div>
+                    <div id="operandBDecimal" class="decimal-preview">Decimal: -</div>
+                </div>
+            </div>
         </div>
-        <div class="operands">
-            <p>Operando B: </p>
-            <input type="text" placeholder="Digite um número em binário" id="operandB" maxlength="4">
-            <div id="operandBError" class="input-error"></div>
-        </div>
-        <div>
+        <div class="actions">
             <button id="add" disabled>Adicionar</button>
             <button id="sub" disabled>Subtrair</button>
         </div>
@@ -30,15 +42,45 @@
         height: 100vh;
     }
 
-    div {
+    .card {
         background-color: white;
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        padding: 28px;
+        border-radius: 18px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+        width: min(92vw, 520px);
+        min-height: 420px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        box-sizing: border-box;
+    }
+
+    .card h1 {
+        margin: 0;
+        text-align: center;
+    }
+
+    .operands-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
     }
 
     .operands {
-        margin-bottom: 15px;
+        padding: 0;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    .operand-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .input-column {
+        flex: 0 0 48%;
+        min-width: 0;
     }
 
     input {
@@ -55,9 +97,33 @@
         background-color: #fff5f5;
     }
 
+    .decimal-preview {
+        flex: 1;
+        margin-top: 5px;
+        min-height: 38px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #eef3f8, #dde7f2);
+        border: 1px solid #cfd9e4;
+        color: #22313f;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        white-space: nowrap;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+
+    .actions {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+    }
+
     button {
         padding: 10px 20px;
-        margin-right: 10px;
         border: none;
         border-radius: 4px;
         background-color: #007BFF;
@@ -94,7 +160,6 @@
     }
 
     .result-box {
-        margin-top: 15px;
         padding: 12px;
         border-radius: 6px;
         background-color: #f5f7fa;
@@ -121,34 +186,51 @@
         return /^[01]{1,4}$/.test(value);
     }
 
-    function updateFieldValidation(inputId, errorId) {
+    function binaryToTwosComplementDecimal(value) {
+        const unsignedValue = parseInt(value, 2);
+        if (value[0] === '1') {
+            return unsignedValue - (1 << value.length);
+        }
+
+        return unsignedValue;
+    }
+
+    function updateFieldValidation(inputId, errorId, decimalId) {
         const input = document.getElementById(inputId);
         const errorBox = document.getElementById(errorId);
+        const decimalBox = document.getElementById(decimalId);
         const value = input.value.trim();
 
         if (value === '') {
             input.classList.remove('invalid');
             errorBox.textContent = '';
             errorBox.classList.remove('show');
+            decimalBox.textContent = '-';
+            decimalBox.title = 'Digite um numero binario de 1 a 4 bits para ver o decimal em complemento de 2.';
             return false;
         }
 
         if (!isValidBinaryInput(value)) {
             input.classList.add('invalid');
-            errorBox.textContent = 'Use apenas 0 e 1, com no maximo 4 bits.';
+            errorBox.textContent = 'Use apenas binário';
             errorBox.classList.add('show');
+            decimalBox.textContent = '-';
+            decimalBox.title = 'Entrada invalida. Use apenas 0 e 1, com no maximo 4 bits.';
             return false;
         }
 
         input.classList.remove('invalid');
         errorBox.textContent = '';
         errorBox.classList.remove('show');
+        const decimalValue = binaryToTwosComplementDecimal(value);
+        decimalBox.textContent = `${decimalValue}`;
+        decimalBox.title = `Complemento de 2: ${value} = ${decimalValue}`;
         return true;
     }
 
     function updateActionButtonsState() {
-        const isAValid = updateFieldValidation('operandA', 'operandAError');
-        const isBValid = updateFieldValidation('operandB', 'operandBError');
+        const isAValid = updateFieldValidation('operandA', 'operandAError', 'operandADecimal');
+        const isBValid = updateFieldValidation('operandB', 'operandBError', 'operandBDecimal');
         const shouldEnable = isAValid && isBValid;
 
         document.getElementById('add').disabled = !shouldEnable;
