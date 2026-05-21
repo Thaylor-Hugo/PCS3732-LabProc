@@ -5,14 +5,16 @@
         <div class="operands">
             <p>Operando A: </p>
             <input type="text" placeholder="Digite um número em binário" id="operandA" maxlength="4">
+            <div id="operandAError" class="input-error"></div>
         </div>
         <div class="operands">
             <p>Operando B: </p>
             <input type="text" placeholder="Digite um número em binário" id="operandB" maxlength="4">
+            <div id="operandBError" class="input-error"></div>
         </div>
         <div>
-            <button id="add">Adicionar</button>
-            <button id="sub">Subtrair</button>
+            <button id="add" disabled>Adicionar</button>
+            <button id="sub" disabled>Subtrair</button>
         </div>
         <div id="resultBox" class="result-box">Resultado: -</div>
     </div>
@@ -45,6 +47,12 @@
         margin-top: 5px;
         border: 1px solid #ccc;
         border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    input.invalid {
+        border-color: #c62828;
+        background-color: #fff5f5;
     }
 
     button {
@@ -55,6 +63,11 @@
         background-color: #007BFF;
         color: white;
         cursor: pointer;
+    }
+
+    button:disabled {
+        background-color: #9bbce6;
+        cursor: not-allowed;
     }
 
     button:hover {
@@ -89,9 +102,61 @@
         font-weight: 600;
         box-shadow: inset 0 0 0 1px #d7dde5;
     }
+
+    .input-error {
+        min-height: 18px;
+        margin-top: 4px;
+        font-size: 12px;
+        color: #c62828;
+        visibility: hidden;
+    }
+
+    .input-error.show {
+        visibility: visible;
+    }
 </style>
 
 <script>
+    function isValidBinaryInput(value) {
+        return /^[01]{1,4}$/.test(value);
+    }
+
+    function updateFieldValidation(inputId, errorId) {
+        const input = document.getElementById(inputId);
+        const errorBox = document.getElementById(errorId);
+        const value = input.value.trim();
+
+        if (value === '') {
+            input.classList.remove('invalid');
+            errorBox.textContent = '';
+            errorBox.classList.remove('show');
+            return false;
+        }
+
+        if (!isValidBinaryInput(value)) {
+            input.classList.add('invalid');
+            errorBox.textContent = 'Use apenas 0 e 1, com no maximo 4 bits.';
+            errorBox.classList.add('show');
+            return false;
+        }
+
+        input.classList.remove('invalid');
+        errorBox.textContent = '';
+        errorBox.classList.remove('show');
+        return true;
+    }
+
+    function updateActionButtonsState() {
+        const isAValid = updateFieldValidation('operandA', 'operandAError');
+        const isBValid = updateFieldValidation('operandB', 'operandBError');
+        const shouldEnable = isAValid && isBValid;
+
+        document.getElementById('add').disabled = !shouldEnable;
+        document.getElementById('sub').disabled = !shouldEnable;
+
+        return shouldEnable;
+    }
+
     function showTopAlert(message) {
         const alertBox = document.getElementById('topAlert');
         alertBox.textContent = message;
@@ -107,13 +172,15 @@
     }
 
     async function sendCalcRequest(op) {
-        const a = document.getElementById('operandA').value.trim();
-        const b = document.getElementById('operandB').value.trim();
+        const isValid = updateActionButtonsState();
 
-        if (!/^[01]{1,4}$/.test(a) || !/^[01]{1,4}$/.test(b)) {
+        if (!isValid) {
             alert('Digite apenas numeros binarios de ate 4 bits nos dois operandos.');
             return;
         }
+
+        const a = document.getElementById('operandA').value.trim();
+        const b = document.getElementById('operandB').value.trim();
 
         hideTopAlert();
 
@@ -145,4 +212,14 @@
     document.getElementById('sub').addEventListener('click', function() {
         sendCalcRequest('sub');
     });
+
+    document.getElementById('operandA').addEventListener('input', function() {
+        updateActionButtonsState();
+    });
+
+    document.getElementById('operandB').addEventListener('input', function() {
+        updateActionButtonsState();
+    });
+
+    updateActionButtonsState();
 </script>
