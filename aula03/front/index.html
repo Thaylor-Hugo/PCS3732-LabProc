@@ -14,6 +14,7 @@
             <button id="add">Adicionar</button>
             <button id="sub">Subtrair</button>
         </div>
+        <div id="resultBox" class="result-box">Resultado: -</div>
     </div>
 </html>
 
@@ -78,6 +79,16 @@
     .top-alert.show {
         display: block;
     }
+
+    .result-box {
+        margin-top: 15px;
+        padding: 12px;
+        border-radius: 6px;
+        background-color: #f5f7fa;
+        color: #222;
+        font-weight: 600;
+        box-shadow: inset 0 0 0 1px #d7dde5;
+    }
 </style>
 
 <script>
@@ -89,6 +100,10 @@
 
     function hideTopAlert() {
         document.getElementById('topAlert').classList.remove('show');
+    }
+
+    function setResultText(text) {
+        document.getElementById('resultBox').textContent = text;
     }
 
     async function sendCalcRequest(op) {
@@ -106,17 +121,17 @@
 
         try {
             const response = await fetch(url);
-            const responseBody = await response.text();
-            const normalizedBody = responseBody.toLowerCase();
-            const isOverflow = response.status === 400;
+            const data = await response.json();
 
-            if (!response.ok || isOverflow) {
-                if (isOverflow) {
-                    showTopAlert('Overflow detectado na operacao.');
-                    return;
-                }
+            if (typeof data.resultado !== 'undefined') {
+                const resultadoBinario = Number(data.resultado).toString(2).padStart(4, '0');
+                setResultText(`Resultado: ${resultadoBinario}`);
+            } else {
+                setResultText('Resultado: -');
+            }
 
-                showTopAlert(`Erro na requisicao (codigo ${response.status}).`);
+            if (data.overflow) {
+                showTopAlert('Overflow detectado na operacao.');
             }
         } catch (error) {
             showTopAlert('Falha ao conectar com a calculadora em 192.168.4.1.');
