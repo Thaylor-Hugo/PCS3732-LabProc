@@ -28,7 +28,10 @@
             <button id="add" disabled>Adicionar</button>
             <button id="sub" disabled>Subtrair</button>
         </div>
-        <div id="resultBox" class="result-box">Resultado: -</div>
+        <div id="resultBox" class="result-box">
+            <div id="resultBinary">Resultado: -</div>
+            <div id="resultDecimal" class="decimal-preview">-</div>
+        </div>
     </div>
 </html>
 
@@ -249,8 +252,21 @@
         document.getElementById('topAlert').classList.remove('show');
     }
 
-    function setResultText(text) {
-        document.getElementById('resultBox').textContent = text;
+    function setResultResult(resultadoBinario) {
+        const binEl = document.getElementById('resultBinary');
+        const decEl = document.getElementById('resultDecimal');
+
+        if (!resultadoBinario) {
+            binEl.textContent = 'Resultado: -';
+            decEl.textContent = '-';
+            decEl.title = 'Resultado indisponivel';
+            return;
+        }
+
+        binEl.textContent = `Resultado: ${resultadoBinario}`;
+        const decVal = binaryToTwosComplementDecimal(resultadoBinario);
+        decEl.textContent = `${decVal}`;
+        decEl.title = `Complemento de 2: ${resultadoBinario} = ${decVal}`;
     }
 
     async function sendCalcRequest(op) {
@@ -274,9 +290,9 @@
 
             if (typeof data.resultado !== 'undefined') {
                 const resultadoBinario = Number(data.resultado).toString(2).padStart(4, '0');
-                setResultText(`Resultado: ${resultadoBinario}`);
+                setResultResult(resultadoBinario);
             } else {
-                setResultText('Resultado: -');
+                setResultResult(null);
             }
 
             if (data.overflow) {
