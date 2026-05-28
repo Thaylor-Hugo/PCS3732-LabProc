@@ -62,6 +62,7 @@ void handleCalc() {
 
   bool overflow = false;
   long full = 0;
+  unsigned long startMicros = micros();
   if (op == "add") {
     int sA = (valA & signMask) ? (valA - (1 << bits)) : valA;
     int sB = (valB & signMask) ? (valB - (1 << bits)) : valB;
@@ -96,7 +97,10 @@ void handleCalc() {
     }
   }
 
-  resultado = resultado & 0x0F;
+  unsigned long elapsedMicros = micros() - startMicros;
+
+  // ensure resultado fits mask
+  resultado = resultado & mask;
   
   digitalWrite(LED_BIT0, (resultado >> 0) & 0x01);
   digitalWrite(LED_BIT1, (resultado >> 1) & 0x01);
@@ -106,6 +110,7 @@ void handleCalc() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
   
   String response = "{\"resultado\":" + String(resultado) + 
-                    ",\"overflow\":" + (overflow ? "true" : "false") + "}";
+                    ",\"overflow\":" + (overflow ? "true" : "false") +
+                    ",\"timeSpent\":" + String(elapsedMicros) + "}";
   server.send(200, "application/json", response);
 }

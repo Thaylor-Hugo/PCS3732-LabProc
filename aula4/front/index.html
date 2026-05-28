@@ -7,7 +7,7 @@
                 <p>Operando A: </p>
                 <div class="operand-row">
                     <div class="input-column">
-                        <input type="text" placeholder="Digite um número em binário" id="operandA" maxlength="4">
+                        <input type="text" placeholder="Digite um número em binário" id="operandA" maxlength="16">
                         <div id="operandAError" class="input-error"></div>
                     </div>
                     <div id="operandADecimal" class="decimal-preview">Decimal: -</div>
@@ -17,7 +17,7 @@
                 <p>Operando B: </p>
                 <div class="operand-row">
                     <div class="input-column">
-                        <input type="text" placeholder="Digite um número em binário" id="operandB" maxlength="4">
+                        <input type="text" placeholder="Digite um número em binário" id="operandB" maxlength="16">
                         <div id="operandBError" class="input-error"></div>
                     </div>
                     <div id="operandBDecimal" class="decimal-preview">Decimal: -</div>
@@ -37,6 +37,7 @@
         <div id="resultBox" class="result-box">
             <div id="resultBinary">Resultado: -</div>
             <div id="resultDecimal" class="decimal-preview">-</div>
+            <div id="timeSpent" class="decimal-preview" style="font-weight:500;">Time: - μs</div>
         </div>
     </div>
 </html>
@@ -198,8 +199,10 @@
 </style>
 
 <script>
-    function isValidBinaryInput(value) {
-        return /^[01]{1,4}$/.test(value);
+    function isValidBinaryInput(value, bits) {
+        const maxBits = bits || 4;
+        const re = new RegExp('^[01]{1,' + maxBits + '}$');
+        return re.test(value);
     }
 
     function binaryToTwosComplementDecimal(value, bits) {
@@ -229,7 +232,7 @@
             return false;
         }
 
-        if (!isValidBinaryInput(value)) {
+        if (!isValidBinaryInput(value, bits)) {
             input.classList.add('invalid');
             errorBox.textContent = 'Use apenas binário';
             errorBox.classList.add('show');
@@ -274,18 +277,22 @@
     function setResultResult(resultadoBinario) {
         const binEl = document.getElementById('resultBinary');
         const decEl = document.getElementById('resultDecimal');
+        const timeEl = document.getElementById('timeSpent');
+        const bits = Number(document.getElementById('bitsInput').value) || (resultadoBinario ? resultadoBinario.length : 4);
 
         if (!resultadoBinario) {
             binEl.textContent = 'Resultado: -';
             decEl.textContent = '-';
             decEl.title = 'Resultado indisponivel';
+            timeEl.textContent = 'Time: - μs';
             return;
         }
 
         binEl.textContent = `Resultado: ${resultadoBinario}`;
-        const decVal = binaryToTwosComplementDecimal(resultadoBinario);
+        const decVal = binaryToTwosComplementDecimal(resultadoBinario, bits);
         decEl.textContent = `${decVal}`;
         decEl.title = `Complemento de 2: ${resultadoBinario} = ${decVal}`;
+        timeEl.textContent = timeEl.dataset.latest ? `Time: ${timeEl.dataset.latest} μs` : 'Time: - μs';
     }
 
     async function sendCalcRequest(op) {
@@ -304,7 +311,7 @@
             }
         } else {
             if (!updateFieldValidation('operandA', 'operandAError', 'operandADecimal') || !updateFieldValidation('operandB', 'operandBError', 'operandBDecimal')) {
-                alert('Digite apenas numeros binarios de ate 4 bits nos dois operandos.');
+                alert('Digite apenas numeros binarios de ate ' + bits + ' bits nos dois operandos.');
                 return;
             }
         }
@@ -323,7 +330,13 @@
             const data = await response.json();
 
             if (typeof data.resultado !== 'undefined') {
-                const resultadoBinario = Number(data.resultado).toString(2).padStart(4, '0');
+                const bits = Number(document.getElementById('bitsInput').value) || 4;
+                const resultadoBinario = Number(data.resultado).toString(2).padStart(bits, '0');
+                // store latest time for display
+                const timeEl = document.getElementById('timeSpent');
+                if (typeof data.timeSpent !== 'undefined') {
+                    timeEl.dataset.latest = String(data.timeSpent);
+                }
                 setResultResult(resultadoBinario);
             } else {
                 setResultResult(null);
