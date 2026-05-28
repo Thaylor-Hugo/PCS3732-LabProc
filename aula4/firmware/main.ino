@@ -54,7 +54,7 @@ void handleCalc() {
   int minSigned = -(1 << (bits - 1));
   int maxSigned = (1 << (bits - 1)) - 1;
   
-  int resultado;
+  int resultado = 0;
   
   // apply mask to operands
   valA = valA & mask;
@@ -75,12 +75,23 @@ void handleCalc() {
     full = (long)sA - (long)sB;
     if (full < minSigned || full > maxSigned) overflow = true;
     resultado = ((int)full) & mask;
-  } else if (op == "mul") {
+  } else if (op == "mult") {
     int sA = (valA & signMask) ? (valA - (1 << bits)) : valA;
     int sB = (valB & signMask) ? (valB - (1 << bits)) : valB;
     full = (long)sA * (long)sB;
     if (full < minSigned || full > maxSigned) overflow = true;
     resultado = ((int)full) & mask;
+    } else if (op == "div" || op == "dividir") {
+      int sA = (valA & signMask) ? (valA - (1 << bits)) : valA;
+      int sB = (valB & signMask) ? (valB - (1 << bits)) : valB;
+      if (sB == 0) {
+        overflow = true;
+        resultado = 0;
+      } else {
+        full = (long)sA / (long)sB;
+        if (full < minSigned || full > maxSigned) overflow = true;
+        resultado = ((int)full) & mask;
+      }
   } else if (op == "fat") {
     int sA = (valA & signMask) ? (valA - (1 << bits)) : valA;
     if (sA < 0) {

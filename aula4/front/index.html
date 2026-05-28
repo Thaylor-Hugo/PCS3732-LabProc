@@ -32,6 +32,7 @@
             <button id="add" disabled>Adicionar</button>
             <button id="sub" disabled>Subtrair</button>
             <button id="mult" disabled>Multiplicar</button>
+            <button id="div" disabled>Dividir</button>
             <button id="fat" disabled>Fatorial</button>
         </div>
         <div id="resultBox" class="result-box">
@@ -258,6 +259,7 @@
         document.getElementById('add').disabled = !bothValid;
         document.getElementById('sub').disabled = !bothValid;
         document.getElementById('mult').disabled = !bothValid;
+        document.getElementById('div').disabled = !bothValid;
         // fatorial requires only operand A
         document.getElementById('fat').disabled = !isAValid;
 
@@ -360,6 +362,10 @@
 
     document.getElementById('mult').addEventListener('click', function() {
         sendCalcRequest('mult');
+    });
+
+    document.getElementById('div').addEventListener('click', function() {
+        sendCalcRequest('div');
     });
 
     document.getElementById('fat').addEventListener('click', function() {
