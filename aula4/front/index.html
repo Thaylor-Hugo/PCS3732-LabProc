@@ -27,6 +27,8 @@
         <div class="actions">
             <button id="add" disabled>Adicionar</button>
             <button id="sub" disabled>Subtrair</button>
+            <button id="mult" disabled>Multiplicar</button>
+            <button id="fat" disabled>Fatorial</button>
         </div>
         <div id="resultBox" class="result-box">
             <div id="resultBinary">Resultado: -</div>
@@ -234,12 +236,15 @@
     function updateActionButtonsState() {
         const isAValid = updateFieldValidation('operandA', 'operandAError', 'operandADecimal');
         const isBValid = updateFieldValidation('operandB', 'operandBError', 'operandBDecimal');
-        const shouldEnable = isAValid && isBValid;
+        const bothValid = isAValid && isBValid;
 
-        document.getElementById('add').disabled = !shouldEnable;
-        document.getElementById('sub').disabled = !shouldEnable;
+        document.getElementById('add').disabled = !bothValid;
+        document.getElementById('sub').disabled = !bothValid;
+        document.getElementById('mult').disabled = !bothValid;
+        // fatorial requires only operand A
+        document.getElementById('fat').disabled = !isAValid;
 
-        return shouldEnable;
+        return bothValid && isAValid;
     }
 
     function showTopAlert(message) {
@@ -270,19 +275,33 @@
     }
 
     async function sendCalcRequest(op) {
-        const isValid = updateActionButtonsState();
-
-        if (!isValid) {
-            alert('Digite apenas numeros binarios de ate 4 bits nos dois operandos.');
-            return;
-        }
+        // refresh validation UI
+        updateActionButtonsState();
 
         const a = document.getElementById('operandA').value.trim();
         const b = document.getElementById('operandB').value.trim();
 
+        // validate according to operation
+        if (op === 'fat') {
+            if (!updateFieldValidation('operandA', 'operandAError', 'operandADecimal')) {
+                alert('Operando A invalido para fatorial.');
+                return;
+            }
+        } else {
+            if (!updateFieldValidation('operandA', 'operandAError', 'operandADecimal') || !updateFieldValidation('operandB', 'operandBError', 'operandBDecimal')) {
+                alert('Digite apenas numeros binarios de ate 4 bits nos dois operandos.');
+                return;
+            }
+        }
+
         hideTopAlert();
 
-        const url = `http://192.168.4.1/calc?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&op=${encodeURIComponent(op)}`;
+        let url;
+        if (op === 'fat') {
+            url = `http://192.168.4.1/calc?a=${encodeURIComponent(a)}&op=${encodeURIComponent(op)}`;
+        } else {
+            url = `http://192.168.4.1/calc?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&op=${encodeURIComponent(op)}`;
+        }
 
         try {
             const response = await fetch(url);
@@ -309,6 +328,14 @@
 
     document.getElementById('sub').addEventListener('click', function() {
         sendCalcRequest('sub');
+    });
+
+    document.getElementById('mult').addEventListener('click', function() {
+        sendCalcRequest('mult');
+    });
+
+    document.getElementById('fat').addEventListener('click', function() {
+        sendCalcRequest('fat');
     });
 
     document.getElementById('operandA').addEventListener('input', function() {
