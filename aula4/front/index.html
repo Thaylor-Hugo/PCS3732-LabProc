@@ -374,5 +374,22 @@
         updateActionButtonsState();
     });
 
+    // keep operand maxlength in sync with selected bits
+    function updateInputMaxLength() {
+        const bits = Number(document.getElementById('bitsInput').value) || 4;
+        const a = document.getElementById('operandA');
+        const b = document.getElementById('operandB');
+        a.maxLength = bits;
+        b.maxLength = bits;
+    }
+
+    document.getElementById('bitsInput').addEventListener('input', function() {
+        updateInputMaxLength();
+        updateActionButtonsState();
+    });
+
+    // initialize maxlength according to default bits
+    updateInputMaxLength();
+
     updateActionButtonsState();
 </script>
