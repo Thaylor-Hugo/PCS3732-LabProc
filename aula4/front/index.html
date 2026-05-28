@@ -1,0 +1,307 @@
+<html>
+    <div id="topAlert" class="top-alert"></div>
+    <div class="card">
+        <h1>Dashboard da Calculadora</h1>
+        <div class="operands-grid">
+            <div class="operands">
+                <p>Operando A: </p>
+                <div class="operand-row">
+                    <div class="input-column">
+                        <input type="text" placeholder="Digite um número em binário" id="operandA" maxlength="4">
+                        <div id="operandAError" class="input-error"></div>
+                    </div>
+                    <div id="operandADecimal" class="decimal-preview">Decimal: -</div>
+                </div>
+            </div>
+            <div class="operands">
+                <p>Operando B: </p>
+                <div class="operand-row">
+                    <div class="input-column">
+                        <input type="text" placeholder="Digite um número em binário" id="operandB" maxlength="4">
+                        <div id="operandBError" class="input-error"></div>
+                    </div>
+                    <div id="operandBDecimal" class="decimal-preview">Decimal: -</div>
+                </div>
+            </div>
+        </div>
+        <div class="actions">
+            <button id="add" disabled>Adicionar</button>
+            <button id="sub" disabled>Subtrair</button>
+        </div>
+        <div id="resultBox" class="result-box">Resultado: -</div>
+    </div>
+</html>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .card {
+        background-color: white;
+        padding: 28px;
+        border-radius: 18px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+        width: min(92vw, 520px);
+        min-height: 420px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        box-sizing: border-box;
+    }
+
+    .card h1 {
+        margin: 0;
+        text-align: center;
+    }
+
+    .operands-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+    .operands {
+        padding: 0;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    .operand-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .input-column {
+        flex: 0 0 48%;
+        min-width: 0;
+    }
+
+    input {
+        width: 100%;
+        padding: 8px;
+        margin-top: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    input.invalid {
+        border-color: #c62828;
+        background-color: #fff5f5;
+    }
+
+    .decimal-preview {
+        flex: 1;
+        margin-top: 5px;
+        min-height: 38px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #eef3f8, #dde7f2);
+        border: 1px solid #cfd9e4;
+        color: #22313f;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        white-space: nowrap;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+
+    .actions {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        background-color: #007BFF;
+        color: white;
+        cursor: pointer;
+    }
+
+    button:disabled {
+        background-color: #9bbce6;
+        cursor: not-allowed;
+    }
+
+    button:hover {
+        background-color: #0056b3;
+    }
+
+    .top-alert {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        display: none;
+        padding: 12px 16px;
+        text-align: center;
+        font-weight: 600;
+        color: #fff;
+        background-color: #c62828;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    }
+
+    .top-alert.show {
+        display: block;
+    }
+
+    .result-box {
+        padding: 12px;
+        border-radius: 6px;
+        background-color: #f5f7fa;
+        color: #222;
+        font-weight: 600;
+        box-shadow: inset 0 0 0 1px #d7dde5;
+    }
+
+    .input-error {
+        min-height: 18px;
+        margin-top: 4px;
+        font-size: 12px;
+        color: #c62828;
+        visibility: hidden;
+    }
+
+    .input-error.show {
+        visibility: visible;
+    }
+</style>
+
+<script>
+    function isValidBinaryInput(value) {
+        return /^[01]{1,4}$/.test(value);
+    }
+
+    function binaryToTwosComplementDecimal(value) {
+        const unsignedValue = parseInt(value, 2);
+        if (value[0] === '1') {
+            return unsignedValue - (1 << value.length);
+        }
+
+        return unsignedValue;
+    }
+
+    function updateFieldValidation(inputId, errorId, decimalId) {
+        const input = document.getElementById(inputId);
+        const errorBox = document.getElementById(errorId);
+        const decimalBox = document.getElementById(decimalId);
+        const value = input.value.trim();
+
+        if (value === '') {
+            input.classList.remove('invalid');
+            errorBox.textContent = '';
+            errorBox.classList.remove('show');
+            decimalBox.textContent = '-';
+            decimalBox.title = 'Digite um numero binario de 1 a 4 bits para ver o decimal em complemento de 2.';
+            return false;
+        }
+
+        if (!isValidBinaryInput(value)) {
+            input.classList.add('invalid');
+            errorBox.textContent = 'Use apenas binário';
+            errorBox.classList.add('show');
+            decimalBox.textContent = '-';
+            decimalBox.title = 'Entrada invalida. Use apenas 0 e 1, com no maximo 4 bits.';
+            return false;
+        }
+
+        input.classList.remove('invalid');
+        errorBox.textContent = '';
+        errorBox.classList.remove('show');
+        const decimalValue = binaryToTwosComplementDecimal(value);
+        decimalBox.textContent = `${decimalValue}`;
+        decimalBox.title = `Complemento de 2: ${value} = ${decimalValue}`;
+        return true;
+    }
+
+    function updateActionButtonsState() {
+        const isAValid = updateFieldValidation('operandA', 'operandAError', 'operandADecimal');
+        const isBValid = updateFieldValidation('operandB', 'operandBError', 'operandBDecimal');
+        const shouldEnable = isAValid && isBValid;
+
+        document.getElementById('add').disabled = !shouldEnable;
+        document.getElementById('sub').disabled = !shouldEnable;
+
+        return shouldEnable;
+    }
+
+    function showTopAlert(message) {
+        const alertBox = document.getElementById('topAlert');
+        alertBox.textContent = message;
+        alertBox.classList.add('show');
+    }
+
+    function hideTopAlert() {
+        document.getElementById('topAlert').classList.remove('show');
+    }
+
+    function setResultText(text) {
+        document.getElementById('resultBox').textContent = text;
+    }
+
+    async function sendCalcRequest(op) {
+        const isValid = updateActionButtonsState();
+
+        if (!isValid) {
+            alert('Digite apenas numeros binarios de ate 4 bits nos dois operandos.');
+            return;
+        }
+
+        const a = document.getElementById('operandA').value.trim();
+        const b = document.getElementById('operandB').value.trim();
+
+        hideTopAlert();
+
+        const url = `http://192.168.4.1/calc?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&op=${encodeURIComponent(op)}`;
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (typeof data.resultado !== 'undefined') {
+                const resultadoBinario = Number(data.resultado).toString(2).padStart(4, '0');
+                setResultText(`Resultado: ${resultadoBinario}`);
+            } else {
+                setResultText('Resultado: -');
+            }
+
+            if (data.overflow) {
+                showTopAlert('Overflow detectado na operacao.');
+            }
+        } catch (error) {
+            showTopAlert('Falha ao conectar com a calculadora em 192.168.4.1.');
+        }
+    }
+
+    document.getElementById('add').addEventListener('click', function() {
+        sendCalcRequest('add');
+    });
+
+    document.getElementById('sub').addEventListener('click', function() {
+        sendCalcRequest('sub');
+    });
+
+    document.getElementById('operandA').addEventListener('input', function() {
+        updateActionButtonsState();
+    });
+
+    document.getElementById('operandB').addEventListener('input', function() {
+        updateActionButtonsState();
+    });
+
+    updateActionButtonsState();
+</script>
