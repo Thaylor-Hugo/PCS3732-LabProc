@@ -4,10 +4,10 @@
 const char* ssid = "ESP32-Calc-GH";
 const char* password = "12345678";
 
-#define LED_BIT0 13
-#define LED_BIT1 12
-#define LED_BIT2 14
-#define LED_BIT3 27
+#define LED_BIT0 4
+#define LED_BIT1 5
+#define LED_BIT2 6
+#define LED_BIT3 7
 
 WebServer server(80);
 
