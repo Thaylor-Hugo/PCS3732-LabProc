@@ -99,6 +99,56 @@
 			gap: 18px;
 		}
 
+		.connection-panel {
+			display: flex;
+			justify-content: space-between;
+			gap: 16px;
+			align-items: center;
+			flex-wrap: wrap;
+			padding: 16px 18px;
+			border-radius: 20px;
+			background: rgba(15, 23, 42, 0.05);
+			border: 1px solid rgba(148, 163, 184, 0.25);
+			margin-bottom: 18px;
+		}
+
+		.connection-copy {
+			display: grid;
+			gap: 6px;
+		}
+
+		.connection-copy strong {
+			font-size: 1rem;
+		}
+
+		.connection-copy span {
+			color: var(--muted);
+			line-height: 1.4;
+		}
+
+		.retry-button {
+			border: none;
+			border-radius: 999px;
+			padding: 11px 16px;
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			color: white;
+			font-weight: 700;
+			cursor: pointer;
+			box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
+		}
+
+		.retry-button:disabled {
+			opacity: 0.65;
+			cursor: wait;
+		}
+
+		.controls-shell.locked {
+			opacity: 0.45;
+			pointer-events: none;
+			user-select: none;
+			filter: grayscale(0.3);
+		}
+
 		.control-card {
 			border: 1px solid rgba(148, 163, 184, 0.3);
 			background: rgba(248, 250, 252, 0.96);
@@ -191,6 +241,10 @@
 				border-radius: 22px;
 			}
 
+			.connection-panel {
+				padding: 14px 14px;
+			}
+
 			.control-card {
 				padding: 16px;
 			}
@@ -202,7 +256,7 @@
 		<section class="header">
 			<div class="title-block">
 				<h1>LED / Servo Dashboard</h1>
-				<p>Move either slider and the board sends the POST request immediately.</p>
+				<p>First the page checks the ESP32 connection. Controls unlock only after it answers successfully.</p>
 			</div>
 			<div id="statusPill" class="status-pill">
 				<span class="status-dot"></span>
@@ -210,6 +264,15 @@
 			</div>
 		</section>
 
+		<section class="connection-panel" aria-live="polite">
+			<div class="connection-copy">
+				<strong id="connectionTitle">Checking ESP32 connection</strong>
+				<span id="connectionMessage">Trying to reach http://192.168.4.1/ ...</span>
+			</div>
+			<button id="retryButton" class="retry-button" type="button">Try again</button>
+		</section>
+
+		<section id="controlsShell" class="controls-shell locked" aria-disabled="true">
 		<section class="controls">
 			<article class="control-card">
 				<div class="control-top">
@@ -239,15 +302,20 @@
 				</div>
 			</article>
 		</section>
+		</section>
 
 		<p class="footer-note">
-			Requests go to <strong>http://192.168.4.1/led?duty_cycle=...</strong> and <strong>http://192.168.4.1/servo?duty_cycle=...</strong> using POST.
+			The dashboard uses <strong>GET /</strong> to verify the ESP32, then sends <strong>POST /led?duty_cycle=...</strong> and <strong>POST /servo?duty_cycle=...</strong>.
 			The servo slider is converted to percentage before sending.
 		</p>
 	</main>
 
 	<script>
 		const baseUrl = 'http://192.168.4.1';
+		const controlsShell = document.getElementById('controlsShell');
+		const connectionTitle = document.getElementById('connectionTitle');
+		const connectionMessage = document.getElementById('connectionMessage');
+		const retryButton = document.getElementById('retryButton');
 		const ledSlider = document.getElementById('ledSlider');
 		const servoSlider = document.getElementById('servoSlider');
 		const ledValue = document.getElementById('ledValue');
@@ -258,10 +326,80 @@
 		let ledTimer = null;
 		let servoTimer = null;
 		let activeRequestId = 0;
+		let connectionTimer = null;
+		let connectionCheckInFlight = false;
+		let isConnected = false;
+		const connectionTimeoutMs = 3000;
 
 		function setStatus(message, ready = false) {
 			statusText.textContent = message;
 			statusPill.classList.toggle('ready', ready);
+		}
+
+		function lockControls() {
+			isConnected = false;
+			controlsShell.classList.add('locked');
+			controlsShell.setAttribute('aria-disabled', 'true');
+			ledSlider.disabled = true;
+			servoSlider.disabled = true;
+		}
+
+		function unlockControls() {
+			isConnected = true;
+			controlsShell.classList.remove('locked');
+			controlsShell.setAttribute('aria-disabled', 'false');
+			ledSlider.disabled = false;
+			servoSlider.disabled = false;
+		}
+
+		function setConnectionState(connected, message) {
+			if (connected) {
+				connectionTitle.textContent = 'ESP32 connected';
+				connectionMessage.textContent = message || 'Connection established. Controls are now unlocked.';
+				retryButton.textContent = 'Reconnect';
+				unlockControls();
+				setStatus('Connected', true);
+				return;
+			}
+
+			connectionTitle.textContent = 'ESP32 not connected';
+			connectionMessage.textContent = message || 'Could not reach the ESP32. The dashboard will try again in 10 seconds.';
+			retryButton.textContent = 'Try again';
+			lockControls();
+			setStatus('Connection error');
+		}
+
+		async function checkConnection() {
+			if (connectionCheckInFlight) {
+				return;
+			}
+
+			connectionCheckInFlight = true;
+			retryButton.disabled = true;
+			connectionTitle.textContent = 'Checking ESP32 connection';
+			connectionMessage.textContent = 'Trying to reach http://192.168.4.1/ ...';
+			const controller = new AbortController();
+			const timeoutId = window.setTimeout(() => controller.abort(), connectionTimeoutMs);
+
+			try {
+				const response = await fetch(`${baseUrl}/`, {
+					method: 'GET',
+					cache: 'no-store',
+					signal: controller.signal,
+				});
+
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+
+				setConnectionState(true, 'Connection established. Controls are unlocked.');
+			} catch (error) {
+				setConnectionState(false, 'Could not reach the ESP32. Check the board and try again.');
+			} finally {
+				window.clearTimeout(timeoutId);
+				connectionCheckInFlight = false;
+				retryButton.disabled = false;
+			}
 		}
 
 		function updateSliderFill(slider) {
@@ -293,6 +431,10 @@
 		}
 
 		function scheduleLedUpdate(value) {
+			if (!isConnected) {
+				return;
+			}
+
 			ledValue.textContent = `${value}%`;
 			updateSliderFill(ledSlider);
 
@@ -303,6 +445,10 @@
 		}
 
 		function scheduleServoUpdate(angle) {
+			if (!isConnected) {
+				return;
+			}
+
 			const percent = Math.round((angle / 180) * 100);
 			servoValue.textContent = `${angle}° / ${percent}%`;
 			updateSliderFill(servoSlider);
@@ -321,11 +467,18 @@
 			scheduleServoUpdate(Number(event.target.value));
 		});
 
+		retryButton.addEventListener('click', () => {
+			checkConnection();
+		});
+
 		updateSliderFill(ledSlider);
 		updateSliderFill(servoSlider);
 		ledValue.textContent = `${Number(ledSlider.value)}%`;
 		servoValue.textContent = `${Number(servoSlider.value)}° / ${Math.round((Number(servoSlider.value) / 180) * 100)}%`;
-		setStatus('Ready', true);
+		lockControls();
+		setStatus('Checking connection');
+		checkConnection();
+		connectionTimer = window.setInterval(checkConnection, 10000);
 	</script>
 </body>
 </html>
