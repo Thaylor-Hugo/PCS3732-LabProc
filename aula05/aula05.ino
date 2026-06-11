@@ -7,13 +7,11 @@ namespace {
 constexpr char kApSsid[] = "ESP32-Grupo-H";
 constexpr char kApPassword[] = "12345678";
 
-constexpr uint8_t kLedPin = 2;
-constexpr uint8_t kServoPin = 18;
-
-constexpr uint8_t kLedChannel = 0;
+constexpr uint8_t kLedPin = 4;
+constexpr uint8_t kServoPin = 5;
 
 constexpr uint32_t kLedFrequency = 5000;
-constexpr uint8_t kLedResolutionBits = 8;
+constexpr uint8_t kLedResolutionBits = 16;
 constexpr uint32_t kLedMinFrequency = 500;
 constexpr uint32_t kLedMaxFrequency = 10000;
 
@@ -91,9 +89,10 @@ uint32_t readLedFrequency(AsyncWebServerRequest *request) {
 void applyLedDuty(int dutyCycle, uint32_t frequencyHz) {
 	currentLedDuty = clampPercent(dutyCycle);
 	currentLedFrequency = frequencyHz;
-	ledcSetup(kLedChannel, currentLedFrequency, kLedResolutionBits);
-	const int pwmValue = map(currentLedDuty, 0, 100, 0, 255);
-	ledcWrite(kLedChannel, pwmValue);
+	ledcAttach(kLedPin, currentLedFrequency, kLedResolutionBits);
+	const uint32_t maxDuty = (1UL << kLedResolutionBits) - 1;
+	const uint32_t pwmValue = map(currentLedDuty, 0, 100, 0, maxDuty);
+	ledcWrite(kLedPin, pwmValue);
 }
 
 void applyServoAngle(int angle) {
@@ -185,8 +184,7 @@ void setup() {
 	delay(200);
 
 	pinMode(kLedPin, OUTPUT);
-	ledcSetup(kLedChannel, kLedFrequency, kLedResolutionBits);
-	ledcAttachPin(kLedPin, kLedChannel);
+	ledcAttach(kLedPin, kLedFrequency, kLedResolutionBits);
 
 	servoMotor.setPeriodHertz(50);
 	servoMotor.attach(kServoPin, kServoMinUs, kServoMaxUs);
