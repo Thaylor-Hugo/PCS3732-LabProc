@@ -14,6 +14,8 @@ constexpr uint8_t kServoChannel = 1;
 
 constexpr uint32_t kLedFrequency = 5000;
 constexpr uint8_t kLedResolutionBits = 8;
+constexpr uint32_t kLedMinFrequency = 500;
+constexpr uint32_t kLedMaxFrequency = 10000;
 
 constexpr uint32_t kServoFrequency = 50;
 constexpr uint8_t kServoResolutionBits = 16;
@@ -25,6 +27,7 @@ AsyncWebServer server(80);
 
 int currentLedDuty = 0;
 int currentServoDuty = 0;
+uint32_t currentLedFrequency = kLedFrequency;
 
 void addCorsHeaders(AsyncWebServerResponse *response) {
 	response->addHeader("Access-Control-Allow-Origin", "*");
@@ -53,8 +56,27 @@ int readDutyCycle(AsyncWebServerRequest *request) {
 	return clampPercent(request->getParam("duty_cycle")->value().toInt());
 }
 
-void applyLedDuty(int dutyCycle) {
+uint32_t readLedFrequency(AsyncWebServerRequest *request) {
+	if (!request->hasParam("pwm_frequency")) {
+		return currentLedFrequency;
+	}
+
+	const int value = request->getParam("pwm_frequency")->value().toInt();
+	if (value < static_cast<int>(kLedMinFrequency)) {
+		return kLedMinFrequency;
+	}
+
+	if (value > static_cast<int>(kLedMaxFrequency)) {
+		return kLedMaxFrequency;
+	}
+
+	return static_cast<uint32_t>(value);
+}
+
+void applyLedDuty(int dutyCycle, uint32_t frequencyHz) {
 	currentLedDuty = clampPercent(dutyCycle);
+	currentLedFrequency = frequencyHz;
+	ledcSetup(kLedChannel, currentLedFrequency, kLedResolutionBits);
 	const int pwmValue = map(currentLedDuty, 0, 100, 0, 255);
 	ledcWrite(kLedChannel, pwmValue);
 }
@@ -96,8 +118,9 @@ void handleLed(AsyncWebServerRequest *request) {
 		return;
 	}
 
-	applyLedDuty(dutyCycle);
-	AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String("{\"led\":") + currentLedDuty + "}");
+	const uint32_t frequencyHz = readLedFrequency(request);
+	applyLedDuty(dutyCycle, frequencyHz);
+	AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String("{\"led\":") + currentLedDuty + String(",\"pwm_frequency\":") + currentLedFrequency + "}");
 	addCorsHeaders(response);
 	request->send(response);
 }
@@ -156,7 +179,7 @@ void setup() {
 	ledcSetup(kServoChannel, kServoFrequency, kServoResolutionBits);
 	ledcAttachPin(kServoPin, kServoChannel);
 
-	applyLedDuty(0);
+	applyLedDuty(0, kLedFrequency);
 	applyServoDuty(0);
 
 	WiFi.mode(WIFI_AP);

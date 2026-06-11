@@ -286,6 +286,17 @@
 						<span>100%</span>
 					</div>
 				</div>
+				<div class="slider-row" style="margin-top: 16px;">
+					<div class="control-top" style="margin-bottom: 10px;">
+						<h2>Led PWM Frequency</h2>
+						<div id="ledFrequencyValue" class="value-badge">5000 Hz</div>
+					</div>
+					<input id="ledFrequencySlider" type="range" min="0" max="10000" step="10" value="5000" aria-label="Led PWM frequency" />
+					<div class="meta-row">
+						<span>0 Hz</span>
+						<span>10000 Hz</span>
+					</div>
+				</div>
 			</article>
 
 			<article class="control-card">
@@ -305,7 +316,7 @@
 		</section>
 
 		<p class="footer-note">
-			The dashboard uses <strong>GET /</strong> to verify the ESP32, then sends <strong>POST /led?duty_cycle=...</strong> and <strong>POST /servo?duty_cycle=...</strong>.
+			The dashboard uses <strong>GET /</strong> to verify the ESP32, then sends <strong>POST /led?duty_cycle=...&amp;pwm_frequency=...</strong> and <strong>POST /servo?duty_cycle=...</strong>.
 			The servo slider is converted to percentage before sending.
 		</p>
 	</main>
@@ -317,8 +328,10 @@
 		const connectionMessage = document.getElementById('connectionMessage');
 		const retryButton = document.getElementById('retryButton');
 		const ledSlider = document.getElementById('ledSlider');
+		const ledFrequencySlider = document.getElementById('ledFrequencySlider');
 		const servoSlider = document.getElementById('servoSlider');
 		const ledValue = document.getElementById('ledValue');
+		const ledFrequencyValue = document.getElementById('ledFrequencyValue');
 		const servoValue = document.getElementById('servoValue');
 		const statusPill = document.getElementById('statusPill');
 		const statusText = document.getElementById('statusText');
@@ -410,12 +423,20 @@
 			slider.style.background = `linear-gradient(90deg, var(--accent) 0%, var(--accent-2) ${percent}%, rgba(226, 232, 240, 0.95) ${percent}%, rgba(226, 232, 240, 0.95) 100%)`;
 		}
 
-		async function sendPost(path, dutyCycle) {
+		async function sendPost(path, dutyCycle, pwmFrequency = null) {
 			const requestId = ++activeRequestId;
 			setStatus(`Sending ${path.slice(1)}...`);
 
 			try {
-				await fetch(`${baseUrl}${path}?duty_cycle=${dutyCycle}`, {
+				const query = new URLSearchParams({
+					duty_cycle: String(dutyCycle),
+				});
+
+				if (pwmFrequency !== null) {
+					query.set('pwm_frequency', String(pwmFrequency));
+				}
+
+				await fetch(`${baseUrl}${path}?${query.toString()}`, {
 					method: 'POST',
 					cache: 'no-store',
 				});
@@ -440,7 +461,21 @@
 
 			window.clearTimeout(ledTimer);
 			ledTimer = window.setTimeout(() => {
-				sendPost('/led', value);
+				sendPost('/led', value, Number(ledFrequencySlider.value));
+			}, 60);
+		}
+
+		function scheduleLedFrequencyUpdate(value) {
+			if (!isConnected) {
+				return;
+			}
+
+			ledFrequencyValue.textContent = `${value} Hz`;
+			updateSliderFill(ledFrequencySlider);
+
+			window.clearTimeout(ledTimer);
+			ledTimer = window.setTimeout(() => {
+				sendPost('/led', Number(ledSlider.value), value);
 			}, 60);
 		}
 
@@ -463,6 +498,10 @@
 			scheduleLedUpdate(Number(event.target.value));
 		});
 
+		ledFrequencySlider.addEventListener('input', (event) => {
+			scheduleLedFrequencyUpdate(Number(event.target.value));
+		});
+
 		servoSlider.addEventListener('input', (event) => {
 			scheduleServoUpdate(Number(event.target.value));
 		});
@@ -472,8 +511,10 @@
 		});
 
 		updateSliderFill(ledSlider);
+		updateSliderFill(ledFrequencySlider);
 		updateSliderFill(servoSlider);
 		ledValue.textContent = `${Number(ledSlider.value)}%`;
+		ledFrequencyValue.textContent = `${Number(ledFrequencySlider.value)} Hz`;
 		servoValue.textContent = `${Number(servoSlider.value)}° / ${Math.round((Number(servoSlider.value) / 180) * 100)}%`;
 		lockControls();
 		setStatus('Checking connection');
