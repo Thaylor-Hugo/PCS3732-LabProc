@@ -1,5 +1,6 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <ESP32Servo.h>
 #include <WiFi.h>
 
 namespace {
@@ -10,23 +11,20 @@ constexpr uint8_t kLedPin = 2;
 constexpr uint8_t kServoPin = 18;
 
 constexpr uint8_t kLedChannel = 0;
-constexpr uint8_t kServoChannel = 1;
 
 constexpr uint32_t kLedFrequency = 5000;
 constexpr uint8_t kLedResolutionBits = 8;
 constexpr uint32_t kLedMinFrequency = 500;
 constexpr uint32_t kLedMaxFrequency = 10000;
 
-constexpr uint32_t kServoFrequency = 50;
-constexpr uint8_t kServoResolutionBits = 16;
-
 constexpr uint16_t kServoMinUs = 500;
 constexpr uint16_t kServoMaxUs = 2500;
 
 AsyncWebServer server(80);
+Servo servoMotor;
 
 int currentLedDuty = 0;
-int currentServoDuty = 0;
+int currentServoAngle = 0;
 uint32_t currentLedFrequency = kLedFrequency;
 
 void addCorsHeaders(AsyncWebServerResponse *response) {
@@ -82,11 +80,9 @@ void applyLedDuty(int dutyCycle, uint32_t frequencyHz) {
 }
 
 void applyServoDuty(int dutyCycle) {
-	currentServoDuty = clampPercent(dutyCycle);
-	const int pulseWidthUs = map(currentServoDuty, 0, 100, kServoMinUs, kServoMaxUs);
-	const uint32_t maxDuty = (1UL << kServoResolutionBits) - 1;
-	const uint32_t duty = (static_cast<uint32_t>(pulseWidthUs) * maxDuty) / 20000UL;
-	ledcWrite(kServoChannel, duty);
+	const int dutyPercent = clampPercent(dutyCycle);
+	currentServoAngle = map(dutyPercent, 0, 100, 0, 180);
+	servoMotor.write(currentServoAngle);
 }
 
 void handleRoot(AsyncWebServerRequest *request) {
@@ -149,7 +145,7 @@ void handleServo(AsyncWebServerRequest *request) {
 	}
 
 	applyServoDuty(dutyCycle);
-	AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String("{\"servo\":") + currentServoDuty + "}");
+	AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String("{\"servo_angle\":") + currentServoAngle + "}");
 	addCorsHeaders(response);
 	request->send(response);
 }
@@ -176,8 +172,8 @@ void setup() {
 	ledcSetup(kLedChannel, kLedFrequency, kLedResolutionBits);
 	ledcAttachPin(kLedPin, kLedChannel);
 
-	ledcSetup(kServoChannel, kServoFrequency, kServoResolutionBits);
-	ledcAttachPin(kServoPin, kServoChannel);
+	servoMotor.setPeriodHertz(50);
+	servoMotor.attach(kServoPin, kServoMinUs, kServoMaxUs);
 
 	applyLedDuty(0, kLedFrequency);
 	applyServoDuty(0);
