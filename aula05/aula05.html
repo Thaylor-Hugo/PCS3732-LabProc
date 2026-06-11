@@ -302,7 +302,7 @@
 			<article class="control-card">
 				<div class="control-top">
 					<h2>Servo Angle</h2>
-					<div id="servoValue" class="value-badge">0° / 0%</div>
+					<div id="servoValue" class="value-badge">0°</div>
 				</div>
 				<div class="slider-row">
 					<input id="servoSlider" type="range" min="0" max="180" step="1" value="0" aria-label="Servo angle" />
@@ -316,8 +316,8 @@
 		</section>
 
 		<p class="footer-note">
-			The dashboard uses <strong>GET /</strong> to verify the ESP32, then sends <strong>POST /led?duty_cycle=...&amp;pwm_frequency=...</strong> and <strong>POST /servo?duty_cycle=...</strong>.
-			The servo slider is converted to percentage before sending.
+			The dashboard uses <strong>GET /</strong> to verify the ESP32, then sends <strong>POST /led?duty_cycle=...&amp;pwm_frequency=...</strong> and <strong>POST /servo?angle=...</strong>.
+				The servo slider is sent as a direct angle.
 		</p>
 	</main>
 
@@ -423,13 +423,13 @@
 			slider.style.background = `linear-gradient(90deg, var(--accent) 0%, var(--accent-2) ${percent}%, rgba(226, 232, 240, 0.95) ${percent}%, rgba(226, 232, 240, 0.95) 100%)`;
 		}
 
-		async function sendPost(path, dutyCycle, pwmFrequency = null) {
+		async function sendPost(path, value, pwmFrequency = null, valueName = 'duty_cycle') {
 			const requestId = ++activeRequestId;
 			setStatus(`Sending ${path.slice(1)}...`);
 
 			try {
 				const query = new URLSearchParams({
-					duty_cycle: String(dutyCycle),
+					[valueName]: String(value),
 				});
 
 				if (pwmFrequency !== null) {
@@ -484,13 +484,12 @@
 				return;
 			}
 
-			const percent = Math.round((angle / 180) * 100);
-			servoValue.textContent = `${angle}° / ${percent}%`;
+			servoValue.textContent = `${angle}°`;
 			updateSliderFill(servoSlider);
 
 			window.clearTimeout(servoTimer);
 			servoTimer = window.setTimeout(() => {
-				sendPost('/servo', percent);
+					sendPost('/servo', angle, null, 'angle');
 			}, 60);
 		}
 
@@ -515,7 +514,7 @@
 		updateSliderFill(servoSlider);
 		ledValue.textContent = `${Number(ledSlider.value)}%`;
 		ledFrequencyValue.textContent = `${Number(ledFrequencySlider.value)} Hz`;
-		servoValue.textContent = `${Number(servoSlider.value)}° / ${Math.round((Number(servoSlider.value) / 180) * 100)}%`;
+		servoValue.textContent = `${Number(servoSlider.value)}°`;
 		lockControls();
 		setStatus('Checking connection');
 		checkConnection();

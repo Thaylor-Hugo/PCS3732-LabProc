@@ -54,6 +54,23 @@ int readDutyCycle(AsyncWebServerRequest *request) {
 	return clampPercent(request->getParam("duty_cycle")->value().toInt());
 }
 
+int readServoAngle(AsyncWebServerRequest *request) {
+	if (!request->hasParam("angle")) {
+		return -1;
+	}
+
+	const int value = request->getParam("angle")->value().toInt();
+	if (value < 0) {
+		return 0;
+	}
+
+	if (value > 180) {
+		return 180;
+	}
+
+	return value;
+}
+
 uint32_t readLedFrequency(AsyncWebServerRequest *request) {
 	if (!request->hasParam("pwm_frequency")) {
 		return currentLedFrequency;
@@ -79,9 +96,8 @@ void applyLedDuty(int dutyCycle, uint32_t frequencyHz) {
 	ledcWrite(kLedChannel, pwmValue);
 }
 
-void applyServoDuty(int dutyCycle) {
-	const int dutyPercent = clampPercent(dutyCycle);
-	currentServoAngle = map(dutyPercent, 0, 100, 0, 180);
+void applyServoAngle(int angle) {
+	currentServoAngle = angle;
 	servoMotor.write(currentServoAngle);
 }
 
@@ -136,15 +152,15 @@ void handleServo(AsyncWebServerRequest *request) {
 		return;
 	}
 
-	const int dutyCycle = readDutyCycle(request);
-	if (dutyCycle < 0) {
-		AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Missing duty_cycle");
+	const int angle = readServoAngle(request);
+	if (angle < 0) {
+		AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Missing angle");
 		addCorsHeaders(response);
 		request->send(response);
 		return;
 	}
 
-	applyServoDuty(dutyCycle);
+	applyServoAngle(angle);
 	AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String("{\"servo_angle\":") + currentServoAngle + "}");
 	addCorsHeaders(response);
 	request->send(response);
@@ -176,7 +192,7 @@ void setup() {
 	servoMotor.attach(kServoPin, kServoMinUs, kServoMaxUs);
 
 	applyLedDuty(0, kLedFrequency);
-	applyServoDuty(0);
+	applyServoAngle(0);
 
 	WiFi.mode(WIFI_AP);
 	WiFi.softAP(kApSsid, kApPassword);
