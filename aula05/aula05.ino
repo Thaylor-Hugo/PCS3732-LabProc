@@ -1,7 +1,6 @@
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
 #include <ESP32Servo.h>
 #include <WiFi.h>
+#include <WebServer.h>
 
 namespace {
 constexpr char kApSsid[] = "ESP32-Grupo-H";
@@ -18,18 +17,18 @@ constexpr uint32_t kLedMaxFrequency = 10000;
 constexpr uint16_t kServoMinUs = 500;
 constexpr uint16_t kServoMaxUs = 2500;
 
-AsyncWebServer server(80);
+WebServer server(80);
 Servo servoMotor;
 
 int currentLedDuty = 0;
 int currentServoAngle = 0;
 uint32_t currentLedFrequency = kLedFrequency;
 
-void addCorsHeaders(AsyncWebServerResponse *response) {
-	response->addHeader("Access-Control-Allow-Origin", "*");
-	response->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-	response->addHeader("Access-Control-Allow-Headers", "Content-Type");
-	response->addHeader("Access-Control-Allow-Private-Network", "true");
+void addCorsHeaders() {
+	server.sendHeader("Access-Control-Allow-Origin", "*");
+	server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+	server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+	server.sendHeader("Access-Control-Allow-Private-Network", "true");
 }
 
 int clampPercent(int value) {
@@ -44,20 +43,20 @@ int clampPercent(int value) {
 	return value;
 }
 
-int readDutyCycle(AsyncWebServerRequest *request) {
-	if (!request->hasParam("duty_cycle")) {
+int readDutyCycle() {
+	if (!server.hasArg("duty_cycle")) {
 		return -1;
 	}
 
-	return clampPercent(request->getParam("duty_cycle")->value().toInt());
+	return clampPercent(server.arg("duty_cycle").toInt());
 }
 
-int readServoAngle(AsyncWebServerRequest *request) {
-	if (!request->hasParam("angle")) {
+int readServoAngle() {
+	if (!server.hasArg("angle")) {
 		return -1;
 	}
 
-	const int value = request->getParam("angle")->value().toInt();
+	const int value = server.arg("angle").toInt();
 	if (value < 0) {
 		return 0;
 	}
@@ -69,12 +68,12 @@ int readServoAngle(AsyncWebServerRequest *request) {
 	return value;
 }
 
-uint32_t readLedFrequency(AsyncWebServerRequest *request) {
-	if (!request->hasParam("pwm_frequency")) {
+uint32_t readLedFrequency() {
+	if (!server.hasArg("pwm_frequency")) {
 		return currentLedFrequency;
 	}
 
-	const int value = request->getParam("pwm_frequency")->value().toInt();
+	const int value = server.arg("pwm_frequency").toInt();
 	if (value < static_cast<int>(kLedMinFrequency)) {
 		return kLedMinFrequency;
 	}
@@ -100,82 +99,69 @@ void applyServoAngle(int angle) {
 	servoMotor.write(currentServoAngle);
 }
 
-void handleRoot(AsyncWebServerRequest *request) {
-	AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "ESP32 controller is running");
-	addCorsHeaders(response);
-	request->send(response);
+void handleRoot() {
+	addCorsHeaders();
+	server.send(200, "text/plain", "ESP32 controller is running");
 }
 
-void handleLed(AsyncWebServerRequest *request) {
-	if (request->method() == HTTP_OPTIONS) {
-		AsyncWebServerResponse *response = request->beginResponse(204);
-		addCorsHeaders(response);
-		request->send(response);
+void handleLedOptions() {
+	addCorsHeaders();
+	server.send(204);
+}
+
+void handleServoOptions() {
+	addCorsHeaders();
+	server.send(204);
+}
+
+void handleLed() {
+	if (server.method() != HTTP_POST) {
+		addCorsHeaders();
+		server.send(405, "text/plain", "Use POST");
 		return;
 	}
 
-	if (request->method() != HTTP_POST) {
-		AsyncWebServerResponse *response = request->beginResponse(405, "text/plain", "Use POST");
-		addCorsHeaders(response);
-		request->send(response);
-		return;
-	}
-
-	const int dutyCycle = readDutyCycle(request);
+	const int dutyCycle = readDutyCycle();
 	if (dutyCycle < 0) {
-		AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Missing duty_cycle");
-		addCorsHeaders(response);
-		request->send(response);
+		addCorsHeaders();
+		server.send(400, "text/plain", "Missing duty_cycle");
 		return;
 	}
 
-	const uint32_t frequencyHz = readLedFrequency(request);
+	const uint32_t frequencyHz = readLedFrequency();
 	applyLedDuty(dutyCycle, frequencyHz);
-	AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String("{\"led\":") + currentLedDuty + String(",\"pwm_frequency\":") + currentLedFrequency + "}");
-	addCorsHeaders(response);
-	request->send(response);
+	addCorsHeaders();
+	server.send(200, "application/json", String("{\"led\":") + currentLedDuty + String(",\"pwm_frequency\":") + currentLedFrequency + "}");
 }
 
-void handleServo(AsyncWebServerRequest *request) {
-	if (request->method() == HTTP_OPTIONS) {
-		AsyncWebServerResponse *response = request->beginResponse(204);
-		addCorsHeaders(response);
-		request->send(response);
+void handleServo() {
+	if (server.method() != HTTP_POST) {
+		addCorsHeaders();
+		server.send(405, "text/plain", "Use POST");
 		return;
 	}
 
-	if (request->method() != HTTP_POST) {
-		AsyncWebServerResponse *response = request->beginResponse(405, "text/plain", "Use POST");
-		addCorsHeaders(response);
-		request->send(response);
-		return;
-	}
-
-	const int angle = readServoAngle(request);
+	const int angle = readServoAngle();
 	if (angle < 0) {
-		AsyncWebServerResponse *response = request->beginResponse(400, "text/plain", "Missing angle");
-		addCorsHeaders(response);
-		request->send(response);
+		addCorsHeaders();
+		server.send(400, "text/plain", "Missing angle");
 		return;
 	}
 
 	applyServoAngle(angle);
-	AsyncWebServerResponse *response = request->beginResponse(200, "application/json", String("{\"servo_angle\":") + currentServoAngle + "}");
-	addCorsHeaders(response);
-	request->send(response);
+	addCorsHeaders();
+	server.send(200, "application/json", String("{\"servo_angle\":") + currentServoAngle + "}");
 }
 
-void handleNotFound(AsyncWebServerRequest *request) {
-	if (request->method() == HTTP_OPTIONS) {
-		AsyncWebServerResponse *response = request->beginResponse(204);
-		addCorsHeaders(response);
-		request->send(response);
+void handleNotFound() {
+	if (server.method() == HTTP_OPTIONS) {
+		addCorsHeaders();
+		server.send(204);
 		return;
 	}
 
-	AsyncWebServerResponse *response = request->beginResponse(404, "text/plain", "Not found");
-	addCorsHeaders(response);
-	request->send(response);
+	addCorsHeaders();
+	server.send(404, "text/plain", "Not found");
 }
 }  // namespace
 
@@ -204,12 +190,13 @@ void setup() {
 
 	server.on("/", HTTP_GET, handleRoot);
 	server.on("/led", HTTP_POST, handleLed);
-	server.on("/led", HTTP_OPTIONS, handleLed);
+	server.on("/led", HTTP_OPTIONS, handleLedOptions);
 	server.on("/servo", HTTP_POST, handleServo);
-	server.on("/servo", HTTP_OPTIONS, handleServo);
+	server.on("/servo", HTTP_OPTIONS, handleServoOptions);
 	server.onNotFound(handleNotFound);
 	server.begin();
 }
 
 void loop() {
+	server.handleClient();
 }
