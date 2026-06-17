@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>LED / Servo Dashboard</title>
+	<style>
+		:root {
+			color-scheme: light;
+			--bg-1: #0f172a;
+			--bg-2: #111827;
+			--panel: rgba(255, 255, 255, 0.92);
+			--panel-border: rgba(148, 163, 184, 0.25);
+			--text: #0f172a;
+			--muted: #475569;
+			--accent: #2563eb;
+			--accent-2: #0ea5e9;
+			--ok: #16a34a;
+			--warn: #ca8a04;
+			--shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		body {
+			margin: 0;
+			min-height: 100vh;
+			font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			color: var(--text);
+			background:
+				radial-gradient(circle at top left, rgba(14, 165, 233, 0.28), transparent 34%),
+				radial-gradient(circle at bottom right, rgba(37, 99, 235, 0.28), transparent 28%),
+				linear-gradient(160deg, var(--bg-1), var(--bg-2));
+			display: grid;
+			place-items: center;
+			padding: 24px;
+		}
+
+		.dashboard {
+			width: min(920px, 100%);
+			background: var(--panel);
+			border: 1px solid var(--panel-border);
+			border-radius: 28px;
+			box-shadow: var(--shadow);
+			backdrop-filter: blur(18px);
+			padding: 28px;
+		}
+
+		.header {
+			display: flex;
+			justify-content: space-between;
+			gap: 16px;
+			align-items: end;
+			margin-bottom: 24px;
+			flex-wrap: wrap;
+		}
+
+		.title-block h1 {
+			margin: 0;
+			font-size: clamp(1.7rem, 3vw, 2.6rem);
+			letter-spacing: -0.04em;
+		}
+
+		.title-block p {
+			margin: 8px 0 0;
+			color: var(--muted);
+		}
+
+		.status-pill {
+			display: inline-flex;
+			align-items: center;
+			gap: 10px;
+			padding: 10px 14px;
+			border-radius: 999px;
+			background: rgba(15, 23, 42, 0.05);
+			color: var(--muted);
+			font-size: 0.95rem;
+			white-space: nowrap;
+		}
+
+		.status-dot {
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			background: var(--warn);
+			box-shadow: 0 0 0 4px rgba(202, 138, 4, 0.12);
+			transition: background 180ms ease, box-shadow 180ms ease;
+		}
+
+		.status-pill.ready .status-dot {
+			background: var(--ok);
+			box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14);
+		}
+
+		.controls {
+			display: grid;
+			gap: 18px;
+		}
+
+		.connection-panel {
+			display: flex;
+			justify-content: space-between;
+			gap: 16px;
+			align-items: center;
+			flex-wrap: wrap;
+			padding: 16px 18px;
+			border-radius: 20px;
+			background: rgba(15, 23, 42, 0.05);
+			border: 1px solid rgba(148, 163, 184, 0.25);
+			margin-bottom: 18px;
+		}
+
+		.connection-copy {
+			display: grid;
+			gap: 6px;
+		}
+
+		.connection-copy strong {
+			font-size: 1rem;
+		}
+
+		.connection-copy span {
+			color: var(--muted);
+			line-height: 1.4;
+		}
+
+		.retry-button {
+			border: none;
+			border-radius: 999px;
+			padding: 11px 16px;
+			background: linear-gradient(135deg, var(--accent), var(--accent-2));
+			color: white;
+			font-weight: 700;
+			cursor: pointer;
+			box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
+		}
+
+		.retry-button:disabled {
+			opacity: 0.65;
+			cursor: wait;
+		}
+
+		.controls-shell.locked {
+			opacity: 0.45;
+			pointer-events: none;
+			user-select: none;
+			filter: grayscale(0.3);
+		}
+
+		.control-card {
+			border: 1px solid rgba(148, 163, 184, 0.3);
+			background: rgba(248, 250, 252, 0.96);
+			border-radius: 22px;
+			padding: 20px;
+		}
+
+		.control-top {
+			display: flex;
+			justify-content: space-between;
+			gap: 16px;
+			align-items: baseline;
+			margin-bottom: 14px;
+			flex-wrap: wrap;
+		}
+
+		.control-top h2 {
+			margin: 0;
+			font-size: 1.1rem;
+		}
+
+		.value-badge {
+			font-variant-numeric: tabular-nums;
+			font-weight: 700;
+			color: #0f172a;
+			background: white;
+			border: 1px solid rgba(148, 163, 184, 0.35);
+			padding: 8px 12px;
+			border-radius: 999px;
+			min-width: 92px;
+			text-align: center;
+		}
+
+		.slider-row {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 10px;
+		}
+
+		input[type="range"] {
+			width: 100%;
+			height: 12px;
+			appearance: none;
+			border-radius: 999px;
+			background: linear-gradient(90deg, var(--accent), var(--accent-2));
+			outline: none;
+		}
+
+		input[type="range"]::-webkit-slider-thumb {
+			appearance: none;
+			width: 26px;
+			height: 26px;
+			border-radius: 50%;
+			border: 4px solid white;
+			background: #0f172a;
+			box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+			cursor: pointer;
+		}
+
+		input[type="range"]::-moz-range-thumb {
+			width: 26px;
+			height: 26px;
+			border-radius: 50%;
+			border: 4px solid white;
+			background: #0f172a;
+			box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+			cursor: pointer;
+		}
+
+		.meta-row {
+			display: flex;
+			justify-content: space-between;
+			gap: 12px;
+			color: var(--muted);
+			font-size: 0.95rem;
+			font-variant-numeric: tabular-nums;
+			flex-wrap: wrap;
+		}
+
+		.footer-note {
+			margin-top: 18px;
+			color: var(--muted);
+			font-size: 0.95rem;
+			line-height: 1.45;
+		}
+
+		@media (max-width: 640px) {
+			.dashboard {
+				padding: 18px;
+				border-radius: 22px;
+			}
+
+			.connection-panel {
+				padding: 14px 14px;
+			}
+
+			.control-card {
+				padding: 16px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<main class="dashboard">
+		<section class="header">
+			<div class="title-block">
+				<h1>LED / Servo Dashboard</h1>
+				<p>First the page checks the ESP32 connection. Controls unlock only after it answers successfully.</p>
+			</div>
+			<div id="statusPill" class="status-pill">
+				<span class="status-dot"></span>
+				<span id="statusText">Ready</span>
+			</div>
+		</section>
+
+		<section class="connection-panel" aria-live="polite">
+			<div class="connection-copy">
+				<strong id="connectionTitle">Checking ESP32 connection</strong>
+				<span id="connectionMessage">Trying to reach http://192.168.4.1/ ...</span>
+			</div>
+			<button id="retryButton" class="retry-button" type="button">Try again</button>
+		</section>
+
+		<section id="controlsShell" class="controls-shell locked" aria-disabled="true">
+		<section class="controls">
+			<article class="control-card">
+				<div class="control-top">
+					<h2>Led Intensity</h2>
+					<div id="ledValue" class="value-badge">0%</div>
+				</div>
+				<div class="slider-row">
+					<input id="ledSlider" type="range" min="0" max="100" step="1" value="0" aria-label="Led intensity" />
+					<div class="meta-row">
+						<span>0%</span>
+						<span>100%</span>
+					</div>
+				</div>
+				<div class="slider-row" style="margin-top: 16px;">
+					<div class="control-top" style="margin-bottom: 10px;">
+						<h2>Led PWM Frequency</h2>
+						<div id="ledFrequencyValue" class="value-badge">5000 Hz</div>
+					</div>
+					<input id="ledFrequencySlider" type="range" min="0" max="10000" step="1" value="5000" aria-label="Led PWM frequency" />
+					<div class="meta-row">
+						<span>0 Hz</span>
+						<span>10000 Hz</span>
+					</div>
+				</div>
+			</article>
+
+			<article class="control-card">
+				<div class="control-top">
+					<h2>Servo Angle</h2>
+					<div id="servoValue" class="value-badge">0°</div>
+				</div>
+				<div class="slider-row">
+					<input id="servoSlider" type="range" min="0" max="180" step="1" value="0" aria-label="Servo angle" />
+					<div class="meta-row">
+						<span>0°</span>
+						<span>180°</span>
+					</div>
+				</div>
+			</article>
+		</section>
+		</section>
+
+		<p class="footer-note">
+			The dashboard uses <strong>GET /</strong> to verify the ESP32, then sends <strong>POST /led?duty_cycle=...&amp;pwm_frequency=...</strong> and <strong>POST /servo?angle=...</strong>.
+				The servo slider is sent as a direct angle.
+		</p>
+	</main>
+
+	<script>
+		const baseUrl = 'http://192.168.4.1';
+		const controlsShell = document.getElementById('controlsShell');
+		const connectionTitle = document.getElementById('connectionTitle');
+		const connectionMessage = document.getElementById('connectionMessage');
+		const retryButton = document.getElementById('retryButton');
+		const ledSlider = document.getElementById('ledSlider');
+		const ledFrequencySlider = document.getElementById('ledFrequencySlider');
+		const servoSlider = document.getElementById('servoSlider');
+		const ledValue = document.getElementById('ledValue');
+		const ledFrequencyValue = document.getElementById('ledFrequencyValue');
+		const servoValue = document.getElementById('servoValue');
+		const statusPill = document.getElementById('statusPill');
+		const statusText = document.getElementById('statusText');
+
+		let ledTimer = null;
+		let servoTimer = null;
+		let activeRequestId = 0;
+		let connectionTimer = null;
+		let connectionCheckInFlight = false;
+		let isConnected = false;
+		const connectionTimeoutMs = 3000;
+
+		function setStatus(message, ready = false) {
+			statusText.textContent = message;
+			statusPill.classList.toggle('ready', ready);
+		}
+
+		function lockControls() {
+			isConnected = false;
+			controlsShell.classList.add('locked');
+			controlsShell.setAttribute('aria-disabled', 'true');
+			ledSlider.disabled = true;
+			servoSlider.disabled = true;
+		}
+
+		function unlockControls() {
+			isConnected = true;
+			controlsShell.classList.remove('locked');
+			controlsShell.setAttribute('aria-disabled', 'false');
+			ledSlider.disabled = false;
+			servoSlider.disabled = false;
+		}
+
+		function setConnectionState(connected, message) {
+			if (connected) {
+				connectionTitle.textContent = 'ESP32 connected';
+				connectionMessage.textContent = message || 'Connection established. Controls are now unlocked.';
+				retryButton.textContent = 'Reconnect';
+				unlockControls();
+				setStatus('Connected', true);
+				return;
+			}
+
+			connectionTitle.textContent = 'ESP32 not connected';
+			connectionMessage.textContent = message || 'Could not reach the ESP32. The dashboard will try again in 10 seconds.';
+			retryButton.textContent = 'Try again';
+			lockControls();
+			setStatus('Connection error');
+		}
+
+		async function checkConnection() {
+			if (connectionCheckInFlight) {
+				return;
+			}
+
+			connectionCheckInFlight = true;
+			retryButton.disabled = true;
+			connectionTitle.textContent = 'Checking ESP32 connection';
+			connectionMessage.textContent = 'Trying to reach http://192.168.4.1/ ...';
+			const controller = new AbortController();
+			const timeoutId = window.setTimeout(() => controller.abort(), connectionTimeoutMs);
+
+			try {
+				const response = await fetch(`${baseUrl}/`, {
+					method: 'GET',
+					cache: 'no-store',
+					signal: controller.signal,
+				});
+
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}`);
+				}
+
+				setConnectionState(true, 'Connection established. Controls are unlocked.');
+			} catch (error) {
+				setConnectionState(false, 'Could not reach the ESP32. Check the board and try again.');
+			} finally {
+				window.clearTimeout(timeoutId);
+				connectionCheckInFlight = false;
+				retryButton.disabled = false;
+			}
+		}
+
+		function updateSliderFill(slider) {
+			const value = Number(slider.value);
+			const min = Number(slider.min);
+			const max = Number(slider.max);
+			const percent = ((value - min) * 100) / (max - min);
+			slider.style.background = `linear-gradient(90deg, var(--accent) 0%, var(--accent-2) ${percent}%, rgba(226, 232, 240, 0.95) ${percent}%, rgba(226, 232, 240, 0.95) 100%)`;
+		}
+
+		async function sendPost(path, value, pwmFrequency = null, valueName = 'duty_cycle') {
+			const requestId = ++activeRequestId;
+			setStatus(`Sending ${path.slice(1)}...`);
+
+			try {
+				const query = new URLSearchParams({
+					[valueName]: String(value),
+				});
+
+				if (pwmFrequency !== null) {
+					query.set('pwm_frequency', String(pwmFrequency));
+				}
+
+				await fetch(`${baseUrl}${path}?${query.toString()}`, {
+					method: 'POST',
+					cache: 'no-store',
+				});
+
+				if (requestId === activeRequestId) {
+					setStatus(`Updated ${path.slice(1)}`, true);
+				}
+			} catch (error) {
+				if (requestId === activeRequestId) {
+					setStatus('Request failed');
+				}
+			}
+		}
+
+		function scheduleLedUpdate(value) {
+			if (!isConnected) {
+				return;
+			}
+
+			ledValue.textContent = `${value}%`;
+			updateSliderFill(ledSlider);
+
+			window.clearTimeout(ledTimer);
+			ledTimer = window.setTimeout(() => {
+				sendPost('/led', value, Number(ledFrequencySlider.value));
+			}, 60);
+		}
+
+		function scheduleLedFrequencyUpdate(value) {
+			if (!isConnected) {
+				return;
+			}
+
+			ledFrequencyValue.textContent = `${value} Hz`;
+			updateSliderFill(ledFrequencySlider);
+
+			window.clearTimeout(ledTimer);
+			ledTimer = window.setTimeout(() => {
+				sendPost('/led', Number(ledSlider.value), value);
+			}, 60);
+		}
+
+		function scheduleServoUpdate(angle) {
+			if (!isConnected) {
+				return;
+			}
+
+			servoValue.textContent = `${angle}°`;
+			updateSliderFill(servoSlider);
+
+			window.clearTimeout(servoTimer);
+			servoTimer = window.setTimeout(() => {
+					sendPost('/servo', angle, null, 'angle');
+			}, 60);
+		}
+
+		ledSlider.addEventListener('input', (event) => {
+			scheduleLedUpdate(Number(event.target.value));
+		});
+
+		ledFrequencySlider.addEventListener('input', (event) => {
+			scheduleLedFrequencyUpdate(Number(event.target.value));
+		});
+
+		servoSlider.addEventListener('input', (event) => {
+			scheduleServoUpdate(Number(event.target.value));
+		});
+
+		retryButton.addEventListener('click', () => {
+			checkConnection();
+		});
+
+		updateSliderFill(ledSlider);
+		updateSliderFill(ledFrequencySlider);
+		updateSliderFill(servoSlider);
+		ledValue.textContent = `${Number(ledSlider.value)}%`;
+		ledFrequencyValue.textContent = `${Number(ledFrequencySlider.value)} Hz`;
+		servoValue.textContent = `${Number(servoSlider.value)}°`;
+		lockControls();
+		setStatus('Checking connection');
+		checkConnection();
+		connectionTimer = window.setInterval(checkConnection, 10000);
+	</script>
+</body>
+</html>
