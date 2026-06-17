@@ -48,6 +48,9 @@ void handleNotFound() {
     server.send(404, "text/plain", "Endpoint not found");
 }
 
+unsigned long lastBlinkTime = 0;
+bool ledState = false;
+
 } // namespace
 
 void setup() {
@@ -61,6 +64,9 @@ void setup() {
     pinMode(kLdrPin, INPUT);
     Serial.print("LDR Input Pin: GPIO ");
     Serial.println(kLdrPin);
+
+    pinMode(LED_BUILTIN, OUTPUT);
+    neopixelWrite(LED_BUILTIN, 0, 0, 0);
 
     WiFi.mode(WIFI_AP);
     WiFi.softAP(kApSsid, kApPassword);
@@ -80,4 +86,24 @@ void setup() {
 
 void loop() {
     server.handleClient();
+
+    const int currentLuminosity = analogRead(kLdrPin);
+
+    if (currentLuminosity <= 1000) {
+        const unsigned long currentMillis = millis();
+        if (currentMillis - lastBlinkTime >= 1000) {
+            lastBlinkTime = currentMillis;
+            ledState = !ledState;
+            if (ledState) {
+                neopixelWrite(LED_BUILTIN, 100, 100, 0);
+            } else {
+                neopixelWrite(LED_BUILTIN, 0, 0, 0);
+            }
+        }
+    } else {
+        if (ledState) {
+            neopixelWrite(LED_BUILTIN, 0, 0, 0);
+            ledState = false;
+        }
+    }
 }
