@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>LDR Luminosity Monitor</title>
+	<!-- Google Fonts for Modern Typography -->
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" />
+	
+	<!-- Separated stylesheet -->
+	<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+	<main class="dashboard">
+		<!-- Header Block -->
+		<header class="header">
+			<div class="title-block">
+				<h1>Aula 06: Luminosity Dashboard</h1>
+				<p>Real-time room luminosity monitoring with automated Night mode activation.</p>
+			</div>
+			<div id="statusPill" class="status-pill">
+				<span class="status-dot"></span>
+				<span id="statusText">Checking...</span>
+			</div>
+		</header>
+
+		<!-- Dashboard Contents Grid -->
+		<section class="dashboard-grid">
+			
+			<!-- Left Column: Controls & Metrics -->
+			<div style="display: flex; flex-direction: column; gap: 24px;">
+				
+				<!-- Connection Config Card -->
+				<article class="card">
+					<h2>ESP32 Server Connection</h2>
+					<div class="connection-settings">
+						<div class="input-group">
+							<input type="text" id="baseUrlInput" value="http://192.168.4.1" placeholder="http://192.168.4.1" aria-label="ESP32 server address" />
+							<button type="button" id="connectBtn" class="btn btn-primary">Reconnect</button>
+						</div>
+						<p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+							Data polls automatically every <strong>500ms</strong> using a <code>GET /</code> request.
+						</p>
+					</div>
+				</article>
+
+				<!-- Sensor Metrics Card -->
+				<article class="card">
+					<h2>LDR Measurements</h2>
+					
+					<!-- Large Display -->
+					<div class="value-display">
+						<div class="value-large">
+							<span id="ldrRaw">--</span>
+							<span class="unit">ADC</span>
+						</div>
+						<span id="ambientModeLabel" style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent);">
+							--
+						</span>
+					</div>
+
+					<!-- Metrics Subgrid -->
+					<div class="metrics-subgrid">
+						<div class="metric-pill">
+							<span class="metric-label">Luminosity</span>
+							<span class="metric-val" id="ldrPercent">--%</span>
+						</div>
+						<div class="metric-pill">
+							<span class="metric-label">ADC Voltage</span>
+							<span class="metric-val" id="ldrVoltage">-- V</span>
+						</div>
+					</div>
+
+					<!-- Simulation Override -->
+					<div class="simulation-control">
+						<div class="sim-header">
+							<span style="font-size: 0.9rem; font-weight: 700; color: var(--status-warn);">Simulation Mode</span>
+							<label class="switch-container">
+								<span class="switch-label" id="simLabelText">OFF</span>
+								<input type="checkbox" id="simSwitch" class="switch-input" />
+								<span class="switch-track">
+									<span class="switch-thumb"></span>
+								</span>
+							</label>
+						</div>
+						
+						<div class="slider-group" id="simSliderGroup" style="opacity: 0.5; pointer-events: none; transition: opacity 0.3s ease;">
+							<div class="slider-meta">
+								<span>Pitch Black (0)</span>
+								<span id="simSliderVal" style="font-weight: 700; font-family: 'Fira Code', monospace; color: var(--text-main);">2000</span>
+								<span>Bright (4095)</span>
+							</div>
+							<input type="range" id="simSlider" min="0" max="4095" value="2000" aria-label="Mock luminosity value" />
+						</div>
+					</div>
+				</article>
+			</div>
+
+			<!-- Right Column: Visual Bed Lamp -->
+			<article class="card lamp-card">
+				<h2>Bed Lamp Visualizer</h2>
+				
+				<div class="lamp-viewport">
+					<svg class="lamp-svg" viewBox="0 0 200 250">
+						<defs>
+							<!-- Radial glow gradient behind the bulb -->
+							<radialGradient id="lampGlow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
+								<stop offset="0%" stop-color="rgba(var(--glow-color), 1)" />
+								<stop offset="30%" stop-color="rgba(var(--glow-color), 0.7)" />
+								<stop offset="70%" stop-color="rgba(var(--glow-color), 0.2)" />
+								<stop offset="100%" stop-color="rgba(var(--glow-color), 0)" />
+							</radialGradient>
+							
+							<!-- Linear beam projection gradient extending downwards -->
+							<linearGradient id="lightBeam" x1="0%" y1="0%" x2="0%" y2="100%">
+								<stop offset="0%" stop-color="rgba(var(--glow-color), 0.75)" />
+								<stop offset="10%" stop-color="rgba(var(--glow-color), 0.6)" />
+								<stop offset="100%" stop-color="rgba(var(--glow-color), 0)" />
+							</linearGradient>
+						</defs>
+
+						<!-- Dynamic Glowing Light Beam (Cone) -->
+						<polygon id="lampBeam" points="72,110 128,110 185,225 15,225" fill="url(#lightBeam)" style="transition: opacity 0.15s ease; opacity: 0.5;" />
+						
+						<!-- Radial Bulb Glow Layer -->
+						<circle id="lampGlowCircle" cx="100" cy="110" r="75" fill="url(#lampGlow)" style="mix-blend-mode: screen; transition: opacity 0.15s ease, transform 0.15s ease; opacity: 0.5;" />
+
+						<!-- Physical Bulb element -->
+						<circle id="lampBulb" cx="100" cy="110" r="14" fill="#ffffff" stroke="var(--lamp-shade)" stroke-width="1" style="transition: fill 0.3s ease;" />
+
+						<!-- Lampshade (Modern Trapezoid) -->
+						<polygon points="75,55 125,55 140,110 60,110" fill="var(--lamp-shade)" stroke="var(--panel-border)" stroke-width="1.5" />
+						
+						<!-- Metal Neck/Stem -->
+						<rect x="97" y="110" width="6" height="110" fill="var(--lamp-pole)" rx="2" />
+						
+						<!-- Interactive Pull Chain -->
+						<g class="pull-chain-group" id="pullChain">
+							<line class="pull-chain-cord" id="pullChainCord" x1="115" y1="110" x2="115" y2="155" stroke-linecap="round" />
+							<circle class="pull-chain-bell" id="pullChainBell" cx="115" cy="155" r="5" />
+						</g>
+						
+						<!-- Table desk wood surface representation -->
+						<line x1="10" y1="225" x2="190" y2="225" stroke="var(--lamp-desk)" stroke-width="4" stroke-linecap="round" />
+						
+						<!-- Sturdy Base -->
+						<path d="M78,220 L122,220 A6,6 0 0,1 116,226 L84,226 A6,6 0 0,1 78,220 Z" fill="var(--lamp-base)" />
+					</svg>
+				</div>
+				
+				<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center;">
+					Click the <strong>lamp pull chain</strong> to toggle Simulation Mode!
+				</p>
+			</article>
+
+			<!-- Bottom: Rolling Realtime Graph -->
+			<article class="card graph-card">
+				<h2>Real-time Luminosity Rolling Graph</h2>
+				<div class="graph-container">
+					<canvas id="historyChart"></canvas>
+				</div>
+			</article>
+
+		</section>
+
+		<!-- Footer Context Info -->
+		<footer class="footer">
+			<div>
+				Dashboard verifies the ESP32 connection and retrieves ADC values from <strong>GET /</strong>.
+			</div>
+			<div>
+				LDR Voltage = (Luminosity Value / 4095) * 3.3V. Low Threshold (&lt; 1000) automatically forces Dark Theme.
+			</div>
+		</footer>
+	</main>
+
+	<!-- Separated script -->
+	<script src="./script.js" defer></script>
+</body>
+</html>
