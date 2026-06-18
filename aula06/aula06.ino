@@ -7,6 +7,7 @@ constexpr char kApSsid[] = "ESP32-Grupo-H";
 constexpr char kApPassword[] = "12345678";
 
 constexpr uint8_t kLdrPin = 34;
+constexpr uint8_t kButtonPin = 12; // Pin assigned to the button
 
 WebServer server(80);
 
@@ -51,6 +52,28 @@ void handleNotFound() {
 unsigned long lastBlinkTime = 0;
 bool ledState = false;
 
+// Variables used inside ISR for button debounce and interrupt control
+volatile bool isRedActive = false;
+volatile unsigned long redStartTime = 0;
+volatile unsigned long lastDebounceTime = 0;
+constexpr unsigned long kDebounceDelayMs = 100;
+
+/**
+ * Interrupt Service Routine (ISR) for the button press.
+ * Runs on falling edge (button pressed to GND).
+ */
+void IRAM_ATTR handleButtonInterrupt() {
+    unsigned long currentTime = millis();
+    // Simple software debouncer
+    if (currentTime - lastDebounceTime > kDebounceDelayMs) {
+        lastDebounceTime = currentTime;
+        if (!isRedActive) {
+            isRedActive = true;
+            redStartTime = currentTime;
+        }
+    }
+}
+
 } // namespace
 
 void setup() {
@@ -65,6 +88,14 @@ void setup() {
     Serial.print("LDR Input Pin: GPIO ");
     Serial.println(kLdrPin);
 
+    // Initialize button pin with internal pullup
+    pinMode(kButtonPin, INPUT_PULLUP);
+    // Attach falling edge interrupt to trigger handleButtonInterrupt when button goes low
+    attachInterrupt(digitalPinToInterrupt(kButtonPin), handleButtonInterrupt, FALLING);
+    Serial.print("Button Pin: GPIO ");
+    Serial.println(kButtonPin);
+
+    // Initialize built-in LED (NeoPixel) pin
     pinMode(LED_BUILTIN, OUTPUT);
     neopixelWrite(LED_BUILTIN, 0, 0, 0);
 
@@ -86,6 +117,17 @@ void setup() {
 
 void loop() {
     server.handleClient();
+
+    if (isRedActive) {
+        neopixelWrite(LED_BUILTIN, 100, 0, 0);
+        ledState = false;
+
+        if (millis() - redStartTime >= 3000) {
+            isRedActive = false;
+            neopixelWrite(LED_BUILTIN, 0, 0, 0);
+        }
+        return;
+    }
 
     const int currentLuminosity = analogRead(kLdrPin);
 
