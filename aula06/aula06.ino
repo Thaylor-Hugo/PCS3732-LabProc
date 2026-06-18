@@ -49,6 +49,12 @@ void handleNotFound() {
     server.send(404, "text/plain", "Endpoint not found");
 }
 
+enum TrafficState {
+    TRAFFIC_GREEN,
+    TRAFFIC_YELLOW,
+    TRAFFIC_RED
+};
+
 unsigned long lastBlinkTime = 0;
 bool ledState = false;
 
@@ -57,6 +63,9 @@ volatile bool isRedActive = false;
 volatile unsigned long redStartTime = 0;
 volatile unsigned long lastDebounceTime = 0;
 constexpr unsigned long kDebounceDelayMs = 100;
+
+volatile TrafficState currentTrafficState = TRAFFIC_GREEN;
+unsigned long trafficStateStartTime = 0;
 
 /**
  * Interrupt Service Routine (ISR) for the button press.
@@ -67,7 +76,8 @@ void IRAM_ATTR handleButtonInterrupt() {
     // Simple software debouncer
     if (currentTime - lastDebounceTime > kDebounceDelayMs) {
         lastDebounceTime = currentTime;
-        if (!isRedActive) {
+        // Ignore if override is already active or if the traffic light is currently RED
+        if (!isRedActive && currentTrafficState != TRAFFIC_RED) {
             isRedActive = true;
             redStartTime = currentTime;
         }
@@ -119,33 +129,78 @@ void loop() {
     server.handleClient();
 
     if (isRedActive) {
+        // Emergency Red Light
         neopixelWrite(LED_BUILTIN, 100, 0, 0);
         ledState = false;
 
         if (millis() - redStartTime >= 3000) {
             isRedActive = false;
-            neopixelWrite(LED_BUILTIN, 0, 0, 0);
+            const int exitLuminosity = analogRead(kLdrPin);
+            if (exitLuminosity <= 1000) {
+                lastBlinkTime = millis();
+                ledState = false;
+                neopixelWrite(LED_BUILTIN, 0, 0, 0);
+            } else {
+                currentTrafficState = TRAFFIC_GREEN;
+                trafficStateStartTime = millis();
+                neopixelWrite(LED_BUILTIN, 0, 100, 0); // Green
+            }
         }
         return;
     }
 
+    static bool wasLowLight = true;
     const int currentLuminosity = analogRead(kLdrPin);
 
     if (currentLuminosity <= 1000) {
+        if (!wasLowLight) {
+            wasLowLight = true;
+            currentTrafficState = TRAFFIC_GREEN;
+        }
+
+        // Night Mode
         const unsigned long currentMillis = millis();
         if (currentMillis - lastBlinkTime >= 1000) {
             lastBlinkTime = currentMillis;
             ledState = !ledState;
             if (ledState) {
-                neopixelWrite(LED_BUILTIN, 100, 100, 0);
+                neopixelWrite(LED_BUILTIN, 100, 100, 0); // Yellow
             } else {
                 neopixelWrite(LED_BUILTIN, 0, 0, 0);
             }
         }
     } else {
-        if (ledState) {
-            neopixelWrite(LED_BUILTIN, 0, 0, 0);
-            ledState = false;
+        if (wasLowLight) {
+            wasLowLight = false;
+            currentTrafficState = TRAFFIC_GREEN;
+            trafficStateStartTime = millis();
+            neopixelWrite(LED_BUILTIN, 0, 100, 0); // Green
+        }
+
+        const unsigned long elapsed = millis() - trafficStateStartTime;
+
+        // Normal traffic light flow
+        if (currentTrafficState == TRAFFIC_GREEN) {
+            neopixelWrite(LED_BUILTIN, 0, 100, 0); // Green
+            if (elapsed >= 4000) {
+                currentTrafficState = TRAFFIC_YELLOW;
+                trafficStateStartTime = millis();
+                neopixelWrite(LED_BUILTIN, 100, 100, 0); // Yellow
+            }
+        } else if (currentTrafficState == TRAFFIC_YELLOW) {
+            neopixelWrite(LED_BUILTIN, 100, 100, 0); // Yellow
+            if (elapsed >= 1000) {
+                currentTrafficState = TRAFFIC_RED;
+                trafficStateStartTime = millis();
+                neopixelWrite(LED_BUILTIN, 100, 0, 0); // Red
+            }
+        } else if (currentTrafficState == TRAFFIC_RED) {
+            neopixelWrite(LED_BUILTIN, 100, 0, 0); // Red
+            if (elapsed >= 3000) {
+                currentTrafficState = TRAFFIC_GREEN;
+                trafficStateStartTime = millis();
+                neopixelWrite(LED_BUILTIN, 0, 100, 0); // Green
+            }
         }
     }
 }
