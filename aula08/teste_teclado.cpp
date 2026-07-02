@@ -76,11 +76,16 @@ char keys[4][4] = {
 };
 
 void keypad_init() {
+    // Força a ativação dos resistores de pull-up internos via sistema.
+    // Isso corrige um bug comum do wiringPi em Raspberry Pi 4/5 onde o pullUpDnControl falha
+    // e deixa os pinos flutuando (floating), causando esse comportamento de "travar".
+    system("raspi-gpio set 19,13,6,5 pu > /dev/null 2>&1 || pinctrl set 19,13,6,5 pu > /dev/null 2>&1");
+
     for (int i=0; i<4; i++) {
         pinMode(ROW[i], OUTPUT);
         digitalWrite(ROW[i], HIGH);
         pinMode(COL[i], INPUT);
-        pullUpDnControl(COL[i], PUD_UP);
+        pullUpDnControl(COL[i], PUD_UP); // Mantém como fallback
     }
 }
 
