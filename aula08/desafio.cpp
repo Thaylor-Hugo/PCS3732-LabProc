@@ -183,4 +183,114 @@ void calculate_and_display() {
     
     // Benchmark local ARM
     auto start = std::chrono::high_resolution_clock::now();
+
+    if (operation == 'A') { fullResult = valA + valB; }
+    else if (operation == 'B') { fullResult = valA - valB; }
+    else if (operation == 'C') { fullResult = valA * valB; }
+    else if (operation == 'D') {
+        if (valB == 0) overflow = true; // Exceção: Divisão por Zero
+        else fullResult = valA / valB;
+    }
+    else if (operation == '*') { // Fatorial
+        if (valA < 0) overflow = true;
+        else {
+            long long acc = 1;
+            for (int i = 1; i <= valA; i++) {
+                acc *= i;
+                if (acc < MIN_SIGNED || acc > MAX_SIGNED) { overflow = true; break; }
+            }
+            fullResult = acc;
+        }
+    }
+
+    // Checagem global de limite (Overflow)
+    if (fullResult < MIN_SIGNED || fullResult > MAX_SIGNED) overflow = true;
+    
+    auto end = std::chrono::high_resolution_clock::now();
+    long long timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    // Renderização do Resultado Final
+    lcd_clear();
+    lcd_loc(0x80); // Linha 1
+    if (overflow && operation == 'D' && valB == 0) {
+        lcd_string("Erro: Div/0");
+    } else if (overflow) {
+        lcd_string("Erro: OVERFLOW");
+    } else {
+        std::string binRes = "Res: " + decimalToBinaryString(fullResult);
+        lcd_string(binRes.c_str());
+        
+        lcd_loc(0xC0); // Linha 2
+        std::string decTimeRes = "D:" + std::to_string(fullResult) + " T:" + std::to_string(timeSpent) + "us";
+        lcd_string(decTimeRes.c_str());
+    }
+    currentState = 3; // Aguarda o usuário apertar '#' para resetar
+}
+
+// ==========================================
+// LOOP PRINCIPAL (Baremetal/Standalone)
+// ==========================================
+int main() {
+    // Inicializa a WiringPi usando a numeração BCM
+    if (wiringPiSetupGpio() == -1) {
+        std::cerr << "Erro ao inicializar WiringPi! Execute com 'sudo'." << std::endl;
+        return 1;
+    }
+
+    lcd_init();
+    setup_keypad();
+    
+    update_display(); // Desenha a tela inicial
+
+    while (true) {
+        char key = get_key();
+        
+        if (key != '\0') {
+            // A tecla '#' atua como RESET em qualquer estado do sistema
+            if (key == '#') { 
+                binA = ""; binB = ""; operation = ' ';
+                currentState = 0;
+                update_display();
+                continue;
+            }
+
+            if (currentState == 0) {
+                // Aceita apenas '0' ou '1' (Binário) limitando a 4 bits
+                if ((key == '0' || key == '1') && binA.length() < BITS) {
+                    binA += key;
+                    update_display();
+                    
+                    if (binA.length() == BITS) {
+                        currentState = 1;
+                        update_display();
+                    }
+                }
+            } 
+            else if (currentState == 1) {
+                if (key == 'A' || key == 'B' || key == 'C' || key == 'D' || key == '*') {
+                    operation = key;
+                    if (operation == '*') { 
+                        // Fatorial ignora o operando B e calcula direto
+                        calculate_and_display();
+                    } else {
+                        currentState = 2;
+                        update_display();
+                    }
+                }
+            } 
+            else if (currentState == 2) {
+                // Aceita apenas '0' ou '1' (Binário) limitando a 4 bits
+                if ((key == '0' || key == '1') && binB.length() < BITS) {
+                    binB += key;
+                    update_display();
+                    
+                    if (binB.length() == BITS) {
+                        calculate_and_display();
+                    }
+                }
+            }
+        }
+        delay(30); // Alivia a carga de processamento na CPU do Raspberry
+    }
+    return 0;
 }
