@@ -2,15 +2,16 @@
 #include <string>
 #include <cmath>
 #include <chrono>
+#include <cstdlib>
 #include <wiringPi.h>
 #include <wiringPiI2C.h>
 
 // ==========================================
 // CONFIGURAÇÃO DO DISPLAY LCD I2C (PCF8574)
 // ==========================================
-#define I2C_ADDR 0x27 // Endereço padrão (pode ser 0x3F dependendo do módulo)
-#define LCD_CHR  1 // Envio de Dado
-#define LCD_CMD  0 // Envio de Comando
+#define I2C_ADDR 0x27 // Endereço I2C padrão (Pode ser 0x3F dependendo do display)
+#define LCD_CHR  1    // Modo de Envio de Dado (Caractere)
+#define LCD_CMD  0    // Modo de Envio de Comando
 #define LCD_BACKLIGHT 0x08
 #define LCD_ENABLE    0b00000100
 
@@ -36,12 +37,15 @@ void lcd_byte(int bits, int mode) {
 
 void lcd_init() {
     lcd_fd = wiringPiI2CSetup(I2C_ADDR);
+    if (lcd_fd == -1) {
+        std::cerr << "Erro ao inicializar o I2C do display LCD." << std::endl;
+    }
     lcd_byte(0x33, LCD_CMD); 
     lcd_byte(0x32, LCD_CMD); 
-    lcd_byte(0x06, LCD_CMD); // Cursor increment mode
+    lcd_byte(0x06, LCD_CMD); // Modo de incremento de cursor
     lcd_byte(0x0C, LCD_CMD); // Display ON, Cursor OFF
-    lcd_byte(0x28, LCD_CMD); // 4-bit mode, 2 lines
-    lcd_byte(0x01, LCD_CMD); // Clear display
+    lcd_byte(0x28, LCD_CMD); // Modo 4-bit, 2 linhas
+    lcd_byte(0x01, LCD_CMD); // Limpar display
     delay(5);
 }
 
@@ -61,11 +65,11 @@ void lcd_string(const char *s) {
 }
 
 // ==========================================
-// CONFIGURAÇÃO DO TECLADO MATRICIAL (4x4)
+// CONFIGURAÇÃO DO TECLADO MATRICIAL (Freenove)
 // ==========================================
-// Pinos usando numeração BCM do Raspberry Pi
-const int ROWS[4] = {5, 6, 13, 19}; 
-const int COLS[4] = {26, 16, 20, 21}; 
+// Numeração BCM padrão do Raspberry Pi
+const int ROWS[4] = {16, 20, 21, 26}; 
+const int COLS[4] = {19, 13, 6, 5}; 
 
 char keys[4][4] = {
   {'1', '2', '3', 'A'}, // A = Add (+)
@@ -75,32 +79,48 @@ char keys[4][4] = {
 };
 
 void setup_keypad() {
+    // [CORREÇÃO DO RASPBERRY PI OS] 
+    // Força o acionamento do resistor de Pull-Up interno para evitar "leituras fantasmas"
+    system("raspi-gpio set 19,13,6,5 pu 2>/dev/null || pinctrl set 19,13,6,5 pu 2>/dev/null");
+
     for (int i = 0; i < 4; i++) {
         pinMode(ROWS[i], OUTPUT);
-        digitalWrite(ROWS[i], HIGH);
+        digitalWrite(ROWS[i], HIGH); // Linhas começam desativadas (HIGH)
         
         pinMode(COLS[i], INPUT);
-        pullUpDnControl(COLS[i], PUD_UP); // Habilita resistor de pull-up interno
+        pullUpDnControl(COLS[i], PUD_UP); // Mantido para retrocompatibilidade
     }
 }
 
 char get_key() {
     for (int r = 0; r < 4; r++) {
-        digitalWrite(ROWS[r], LOW);
+        digitalWrite(ROWS[r], LOW); // Ativa a linha atual (nível baixo)
+        
         for (int c = 0; c < 4; c++) {
             if (digitalRead(COLS[c]) == LOW) {
-                delay(200); // Debounce rústico em software
-                digitalWrite(ROWS[r], HIGH);
-                return keys[r][c];
+                delay(30); // Filtro de ruído (Debounce)
+                
+                if (digitalRead(COLS[c]) == LOW) { // Confirma o aperto
+                    char pressedKey = keys[r][c];
+                    
+                    // Trava o loop até o usuário SOLTAR o botão
+                    // Isso impede o bug de imprimir a mesma tecla infinitamente
+                    while(digitalRead(COLS[c]) == LOW) {
+                        delay(10);
+                    }
+                    
+                    digitalWrite(ROWS[r], HIGH); // Restaura a linha antes de sair
+                    return pressedKey;
+                }
             }
         }
-        digitalWrite(ROWS[r], HIGH);
+        digitalWrite(ROWS[r], HIGH); // Desativa a linha para ler a próxima
     }
     return '\0'; // Nenhuma tecla pressionada
 }
 
 // ==========================================
-// LÓGICA DE CÁLCULO (4 BITS)
+// LÓGICA DE CÁLCULO E MATEMÁTICA (4 BITS)
 // ==========================================
 const int BITS = 4;
 const int MIN_SIGNED = -8;
@@ -108,7 +128,9 @@ const int MAX_SIGNED = 7;
 
 int binaryToDecimal(const std::string& bin) {
     int unsignedValue = std::stol(bin, nullptr, 2);
-    int signMask = 1 << (BITS - 1);
+    int signMask = 1 << (BITS - 1); // Extrai o MSB (Bit de sinal)
+    
+    // Aplica regra de Complemento de Dois se o número for negativo
     if ((unsignedValue & signMask) != 0) {
         return unsignedValue - (1 << BITS);
     }
@@ -119,6 +141,7 @@ std::string decimalToBinaryString(int value) {
     std::string s = "";
     int mask = (1 << BITS) - 1;
     int maskedVal = value & mask;
+    
     for (int i = BITS - 1; i >= 0; i--) {
         s += ((maskedVal >> i) & 1) ? "1" : "0";
     }
@@ -126,23 +149,25 @@ std::string decimalToBinaryString(int value) {
 }
 
 // ==========================================
-// MÁQUINA DE ESTADOS PRINCIPAL
+// MÁQUINA DE ESTADOS E INTERFACE
 // ==========================================
 std::string binA = "", binB = "";
 char operation = ' ';
-int currentState = 0; // 0=Lendo A, 1=Lendo Op, 2=Lendo B, 3=Resultado
+int currentState = 0; // 0=Lendo A, 1=Lendo OpCode, 2=Lendo B, 3=Exibindo Resultado
 
 void update_display() {
     lcd_clear();
-    lcd_loc(0x80); // Linha 1
+    lcd_loc(0x80); // Posiciona cursor na Linha 1
 
     if (currentState == 0) {
         std::string msg = "A(4b): " + binA;
         lcd_string(msg.c_str());
-    } else if (currentState == 1) {
+    } 
+    else if (currentState == 1) {
         std::string msg = "A:" + binA + " Op(A-D,*)";
         lcd_string(msg.c_str());
-    } else if (currentState == 2) {
+    } 
+    else if (currentState == 2) {
         char opChar = (operation == 'A') ? '+' : (operation == 'B') ? '-' : (operation == 'C') ? '*' : '/';
         std::string msg = "A" + std::string(1, opChar) + " B(4b): " + binB;
         lcd_string(msg.c_str());
@@ -156,102 +181,5 @@ void calculate_and_display() {
     long long fullResult = 0;
     bool overflow = false;
     
-    // Medição de tempo (opcional para o display, mas mantida no código ARM)
+    // Benchmark local ARM
     auto start = std::chrono::high_resolution_clock::now();
-
-    if (operation == 'A') { fullResult = valA + valB; }
-    else if (operation == 'B') { fullResult = valA - valB; }
-    else if (operation == 'C') { fullResult = valA * valB; }
-    else if (operation == 'D') {
-        if (valB == 0) overflow = true;
-        else fullResult = valA / valB;
-    }
-    else if (operation == '*') {
-        if (valA < 0) overflow = true;
-        else {
-            long long acc = 1;
-            for (int i = 1; i <= valA; i++) {
-                acc *= i;
-                if (acc < MIN_SIGNED || acc > MAX_SIGNED) { overflow = true; break; }
-            }
-            fullResult = acc;
-        }
-    }
-
-    if (fullResult < MIN_SIGNED || fullResult > MAX_SIGNED) overflow = true;
-    
-    auto end = std::chrono::high_resolution_clock::now();
-    long long timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-
-    lcd_clear();
-    lcd_loc(0x80); // Linha 1
-    if (overflow && operation == 'D' && valB == 0) {
-        lcd_string("Erro: Div/0");
-    } else if (overflow) {
-        lcd_string("Erro: OVERFLOW");
-    } else {
-        std::string binRes = "Res: " + decimalToBinaryString(fullResult);
-        lcd_string(binRes.c_str());
-        
-        lcd_loc(0xC0); // Linha 2
-        std::string decTimeRes = "D:" + std::to_string(fullResult) + " T:" + std::to_string(timeSpent) + "us";
-        lcd_string(decTimeRes.c_str());
-    }
-    currentState = 3;
-}
-
-int main() {
-    // Inicializa a WiringPi usando numeração padrão BCM
-    if (wiringPiSetupGpio() == -1) {
-        std::cerr << "Erro ao inicializar WiringPi!" << std::endl;
-        return 1;
-    }
-
-    lcd_init();
-    setup_keypad();
-    
-    update_display(); // Exibe estado inicial
-
-    while (true) {
-        char key = get_key();
-        
-        if (key != '\0') {
-            if (key == '#') { // RESET
-                binA = ""; binB = ""; operation = ' ';
-                currentState = 0;
-                update_display();
-                continue;
-            }
-
-            if (currentState == 0) {
-                if ((key == '0' || key == '1') && binA.length() < BITS) {
-                    binA += key;
-                    update_display();
-                    if (binA.length() == BITS) currentState = 1; update_display();
-                }
-            } 
-            else if (currentState == 1) {
-                if (key == 'A' || key == 'B' || key == 'C' || key == 'D' || key == '*') {
-                    operation = key;
-                    if (operation == '*') { // Fatorial
-                        calculate_and_display();
-                    } else {
-                        currentState = 2;
-                        update_display();
-                    }
-                }
-            } 
-            else if (currentState == 2) {
-                if ((key == '0' || key == '1') && binB.length() < BITS) {
-                    binB += key;
-                    update_display();
-                    if (binB.length() == BITS) {
-                        calculate_and_display();
-                    }
-                }
-            }
-        }
-        delay(50); // Alivia a carga na CPU
-    }
-    return 0;
-}
