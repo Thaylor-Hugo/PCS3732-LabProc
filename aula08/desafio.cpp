@@ -5,23 +5,26 @@
 #include <cstdlib>
 #include <wiringPi.h>
 #include <wiringPiI2C.h>
+#include <unistd.h>
 
 // ==========================================
-// CONFIGURAÇÃO DO DISPLAY LCD I2C (PCF8574)
+// CONFIGURAÇÕES DO DISPLAY LCD I2C
 // ==========================================
-#define I2C_ADDR 0x27 
-#define LCD_CHR  1    
-#define LCD_CMD  0    
-#define LCD_BACKLIGHT 0x08
-#define LCD_ENABLE    0b00000100
+#define I2C_ADDR 0x27 // Endereço comum do PCF8574. Tente 0x3F se não funcionar.
+#define LCD_CHR  1 // Modo envio de caractere
+#define LCD_CMD  0 // Modo envio de comando
+#define LINE1  0x80 // Endereço da 1a linha
+#define LINE2  0xC0 // Endereço da 2a linha
+#define LCD_BACKLIGHT   0x08  // Bit 3 do PCF8574 (Ligado)
+#define ENABLE  0b00000100 // Bit 2 do PCF8574
 
-int lcd_fd; 
+int lcd_fd;
 
 void lcd_toggle_enable(int bits) {
     delayMicroseconds(500);
-    wiringPiI2CWrite(lcd_fd, (bits | LCD_ENABLE));
+    wiringPiI2CWrite(lcd_fd, (bits | ENABLE));
     delayMicroseconds(500);
-    wiringPiI2CWrite(lcd_fd, (bits & ~LCD_ENABLE));
+    wiringPiI2CWrite(lcd_fd, (bits & ~ENABLE));
     delayMicroseconds(500);
 }
 
@@ -31,6 +34,7 @@ void lcd_byte(int bits, int mode) {
 
     wiringPiI2CWrite(lcd_fd, bits_high);
     lcd_toggle_enable(bits_high);
+
     wiringPiI2CWrite(lcd_fd, bits_low);
     lcd_toggle_enable(bits_low);
 }
@@ -38,257 +42,325 @@ void lcd_byte(int bits, int mode) {
 void lcd_init() {
     lcd_fd = wiringPiI2CSetup(I2C_ADDR);
     if (lcd_fd == -1) {
-        std::cerr << "Erro ao inicializar o I2C do display LCD." << std::endl;
+        std::cerr << "Erro ao inicializar o I2C do display LCD.\n";
+        exit(1);
     }
-    lcd_byte(0x33, LCD_CMD); 
-    lcd_byte(0x32, LCD_CMD); 
-    lcd_byte(0x06, LCD_CMD); 
-    lcd_byte(0x0C, LCD_CMD); 
-    lcd_byte(0x28, LCD_CMD); 
-    lcd_byte(0x01, LCD_CMD); 
-    delay(5);
+    lcd_byte(0x33, LCD_CMD);
+    lcd_byte(0x32, LCD_CMD);
+    lcd_byte(0x06, LCD_CMD);
+    lcd_byte(0x0C, LCD_CMD);
+    lcd_byte(0x28, LCD_CMD);
+    lcd_byte(0x01, LCD_CMD);
+    delayMicroseconds(500);
 }
 
 void lcd_clear() {
     lcd_byte(0x01, LCD_CMD);
-    delay(5);
+    delay(2);
 }
 
 void lcd_loc(int line) {
     lcd_byte(line, LCD_CMD);
 }
 
-void lcd_string(const char *s) {
+void lcd_print(const char *s) {
     while (*s) {
         lcd_byte(*(s++), LCD_CHR);
     }
 }
 
+void lcd_print(std::string s) {
+    lcd_print(s.c_str());
+}
+
 // ==========================================
-// CONFIGURAÇÃO DO TECLADO MATRICIAL (Freenove)
+// CONFIGURAÇÕES DO TECLADO MATRICIAL 4X4
 // ==========================================
-const int ROWS[4] = {16, 20, 21, 26}; 
-const int COLS[4] = {19, 13, 6, 5}; 
+// Usando pinagem padrão do WiringPi
+const int ROW[4] = {16, 20, 21, 26}; // Pinos 11, 12, 13, 15 no Header físico (por ex)
+const int COL[4] = {19, 13, 6, 5}; // Pinos 16, 18, 22, 7 no Header físico
 
 char keys[4][4] = {
-  {'1', '2', '3', 'A'}, 
-  {'4', '5', '6', 'B'}, 
-  {'7', '8', '9', 'C'}, 
-  {'*', '0', '#', 'D'}  
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
 };
 
-void setup_keypad() {
-    // Força o acionamento do Pull-Up via kernel para evitar flutuação (spams)
-    system("raspi-gpio set 19,13,6,5 pu 2>/dev/null || pinctrl set 19,13,6,5 pu 2>/dev/null");
-
-    for (int i = 0; i < 4; i++) {
-        pinMode(ROWS[i], OUTPUT);
-        digitalWrite(ROWS[i], HIGH); 
-        pinMode(COLS[i], INPUT);
-        pullUpDnControl(COLS[i], PUD_UP); 
+void keypad_init() {
+    for (int i=0; i<4; i++) {
+        pinMode(ROW[i], OUTPUT);
+        digitalWrite(ROW[i], HIGH);
+        pinMode(COL[i], INPUT);
+        pullUpDnControl(COL[i], PUD_UP);
     }
 }
 
-char get_key() {
-    for (int r = 0; r < 4; r++) {
-        digitalWrite(ROWS[r], LOW); 
-        
-        // -------------------------------------------------------------
-        // CORREÇÃO DE SLEW RATE: Espera a voltagem física cair para 0V
-        // antes do rápido processador ARM tentar ler a coluna.
-        // -------------------------------------------------------------
-        delay(2); 
-
-        for (int c = 0; c < 4; c++) {
-            if (digitalRead(COLS[c]) == LOW) {
-                delay(30); // Debounce mecânico
-                
-                if (digitalRead(COLS[c]) == LOW) { 
-                    char pressedKey = keys[r][c];
-                    
-                    while(digitalRead(COLS[c]) == LOW) {
-                        delay(10);
-                    }
-                    
-                    digitalWrite(ROWS[r], HIGH); 
-                    
-                    // Espera a voltagem subir novamente antes de sair
-                    delay(2); 
-                    return pressedKey;
+char keypad_scan() {
+    for (int r=0; r<4; r++) {
+        digitalWrite(ROW[r], LOW);
+        for (int c=0; c<4; c++) {
+            if (digitalRead(COL[c]) == LOW) {
+                delay(20); // Debounce
+                if (digitalRead(COL[c]) == LOW) {
+                    while (digitalRead(COL[c]) == LOW) { delay(10); } // Aguarda soltar
+                    digitalWrite(ROW[r], HIGH);
+                    return keys[r][c];
                 }
             }
         }
-        digitalWrite(ROWS[r], HIGH); 
-        
-        // Garante que a linha subiu totalmente antes do loop ir para a próxima
-        delay(1); 
+        digitalWrite(ROW[r], HIGH);
     }
-    return '\0'; 
+    return '\0';
 }
 
 // ==========================================
-// LÓGICA DE CÁLCULO E MATEMÁTICA (4 BITS)
+// LÓGICA DA CALCULADORA (Adaptada do main.cpp)
 // ==========================================
-const int BITS = 4;
-const int MIN_SIGNED = -8;
-const int MAX_SIGNED = 7;
+struct CalcResult {
+    int resultado;
+    bool overflow;
+    long long timeSpentMicros;
+};
 
-int binaryToDecimal(const std::string& bin) {
+int binaryToDecimal(const std::string& bin, int bits) {
     int unsignedValue = std::stol(bin, nullptr, 2);
-    int signMask = 1 << (BITS - 1); 
-    
+    int signMask = 1 << (bits - 1);
     if ((unsignedValue & signMask) != 0) {
-        return unsignedValue - (1 << BITS);
+        return unsignedValue - (1 << bits);
     }
     return unsignedValue;
 }
 
-std::string decimalToBinaryString(int value) {
+std::string decimalToBinaryString(int value, int bits) {
     std::string s = "";
-    int mask = (1 << BITS) - 1;
+    int mask = (1 << bits) - 1;
     int maskedVal = value & mask;
-    
-    for (int i = BITS - 1; i >= 0; i--) {
+    for (int i = bits - 1; i >= 0; i--) {
         s += ((maskedVal >> i) & 1) ? "1" : "0";
     }
     return s;
 }
 
-// ==========================================
-// MÁQUINA DE ESTADOS E INTERFACE
-// ==========================================
-std::string binA = "", binB = "";
-char operation = ' ';
-int currentState = 0; 
+CalcResult executarCalculo(std::string binA, std::string binB, std::string op, int bits) {
+    CalcResult res;
+    res.overflow = false;
+    res.resultado = 0;
 
-void update_display() {
-    lcd_clear();
-    lcd_loc(0x80); 
+    int mask = (bits >= 32) ? -1 : ((1 << bits) - 1);
+    int signMask = 1 << (bits - 1);
+    int minSigned = -(1 << (bits - 1));
+    int maxSigned = (1 << (bits - 1)) - 1;
 
-    if (currentState == 0) {
-        std::string msg = "A(4b): " + binA;
-        lcd_string(msg.c_str());
-    } 
-    else if (currentState == 1) {
-        std::string msg = "A:" + binA + " Op(A-D,*)";
-        lcd_string(msg.c_str());
-    } 
-    else if (currentState == 2) {
-        char opChar = (operation == 'A') ? '+' : (operation == 'B') ? '-' : (operation == 'C') ? '*' : '/';
-        std::string msg = "A" + std::string(1, opChar) + " B(4b): " + binB;
-        lcd_string(msg.c_str());
-    }
-}
+    int valA = binaryToDecimal(binA, bits) & mask;
+    int valB = (op != "fat") ? (binaryToDecimal(binB, bits) & mask) : 0;
 
-void calculate_and_display() {
-    int valA = binaryToDecimal(binA);
-    int valB = (operation != '*') ? binaryToDecimal(binB) : 0;
-    
-    long long fullResult = 0;
-    bool overflow = false;
-    
+    int sA = (valA & signMask) ? (valA - (1 << bits)) : valA;
+    int sB = (valB & signMask) ? (valB - (1 << bits)) : valB;
+
+    long long full = 0;
+
     auto start = std::chrono::high_resolution_clock::now();
 
-    if (operation == 'A') { fullResult = valA + valB; }
-    else if (operation == 'B') { fullResult = valA - valB; }
-    else if (operation == 'C') { fullResult = valA * valB; }
-    else if (operation == 'D') {
-        if (valB == 0) overflow = true; 
-        else fullResult = valA / valB;
-    }
-    else if (operation == '*') { 
-        if (valA < 0) overflow = true;
-        else {
+    if (op == "add") {
+        full = (long long)sA + sB;
+        if (full < minSigned || full > maxSigned) res.overflow = true;
+        res.resultado = ((int)full) & mask;
+    } 
+    else if (op == "sub") {
+        full = (long long)sA - sB;
+        if (full < minSigned || full > maxSigned) res.overflow = true;
+        res.resultado = ((int)full) & mask;
+    } 
+    else if (op == "mult") {
+        full = (long long)sA * sB;
+        if (full < minSigned || full > maxSigned) res.overflow = true;
+        res.resultado = ((int)full) & mask;
+    } 
+    else if (op == "div") {
+        if (sB == 0) {
+            res.overflow = true;
+            res.resultado = 0;
+        } else {
+            full = (long long)sA / sB;
+            if (full < minSigned || full > maxSigned) res.overflow = true;
+            res.resultado = ((int)full) & mask;
+        }
+    } 
+    else if (op == "fat") {
+        if (sA < 0) {
+            res.overflow = true;
+            res.resultado = 0;
+        } else {
             long long acc = 1;
-            for (int i = 1; i <= valA; i++) {
+            for (int i = 1; i <= sA; i++) {
                 acc *= i;
-                if (acc < MIN_SIGNED || acc > MAX_SIGNED) { overflow = true; break; }
+                if (acc < minSigned || acc > maxSigned) res.overflow = true;
             }
-            fullResult = acc;
+            res.resultado = ((int)acc) & mask;
         }
     }
 
-    if (fullResult < MIN_SIGNED || fullResult > MAX_SIGNED) overflow = true;
-    
     auto end = std::chrono::high_resolution_clock::now();
-    long long timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    res.timeSpentMicros = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-    lcd_clear();
-    lcd_loc(0x80); 
-    if (overflow && operation == 'D' && valB == 0) {
-        lcd_string("Erro: Div/0");
-    } else if (overflow) {
-        lcd_string("Erro: OVERFLOW");
-    } else {
-        std::string binRes = "Res: " + decimalToBinaryString(fullResult);
-        lcd_string(binRes.c_str());
-        
-        lcd_loc(0xC0); 
-        std::string decTimeRes = "D:" + std::to_string(fullResult) + " T:" + std::to_string(timeSpent) + "us";
-        lcd_string(decTimeRes.c_str());
-    }
-    currentState = 3; 
+    return res;
 }
 
 // ==========================================
-// LOOP PRINCIPAL (Baremetal/Standalone)
+// MÁQUINA DE ESTADOS DA INTERFACE (FSM)
 // ==========================================
+enum State { SET_BITS, GET_A, GET_OP, GET_B, SHOW_RESULT };
+
 int main() {
-    if (wiringPiSetupGpio() == -1) {
-        std::cerr << "Erro ao inicializar WiringPi! Execute com 'sudo'." << std::endl;
+    if (wiringPiSetup() == -1) {
+        std::cerr << "Erro ao inicializar wiringPi\n";
         return 1;
     }
-
-    lcd_init();
-    setup_keypad();
     
-    update_display(); 
+    lcd_init();
+    keypad_init();
 
-    while (true) {
-        char key = get_key();
-        
-        if (key != '\0') {
-            if (key == '#') { 
-                binA = ""; binB = ""; operation = ' ';
-                currentState = 0;
-                update_display();
-                continue;
+    State currentState = SET_BITS;
+    int bits = 0;
+    std::string binA = "";
+    std::string binB = "";
+    std::string op = "";
+    std::string currentInput = "";
+    
+    lcd_clear();
+    lcd_loc(LINE1);
+    lcd_print("Bits (2-16):");
+
+    while(true) {
+        char k = keypad_scan();
+        if (k != '\0') {
+            if (currentState == SET_BITS) {
+                if (k >= '0' && k <= '9') {
+                    if (currentInput.length() < 2) currentInput += k; // máx 2 digitos para bits
+                    lcd_loc(LINE2);
+                    lcd_print(currentInput + "  ");
+                } else if (k == 'B') { 
+                    if (currentInput.length() > 0) currentInput.pop_back();
+                    lcd_loc(LINE2);
+                    lcd_print(currentInput + "  ");
+                } else if (k == 'A') { // ENTER
+                    if (currentInput.length() > 0) {
+                        bits = std::stoi(currentInput);
+                        if (bits >= 2 && bits <= 16) { 
+                            currentState = GET_A;
+                            currentInput = "";
+                            lcd_clear();
+                            lcd_loc(LINE1);
+                            lcd_print("Op A (Bin):");
+                        } else {
+                            lcd_clear();
+                            lcd_loc(LINE1);
+                            lcd_print("Min 2, Max 16!");
+                            delay(1500);
+                            lcd_clear();
+                            lcd_loc(LINE1);
+                            lcd_print("Bits (2-16):");
+                            currentInput = "";
+                        }
+                    }
+                }
+            } 
+            else if (currentState == GET_A) {
+                if (k == '0' || k == '1') {
+                    if (currentInput.length() < (size_t)bits) currentInput += k;
+                    lcd_loc(LINE2);
+                    lcd_print(currentInput + " ");
+                } else if (k == 'B') {
+                    if (currentInput.length() > 0) currentInput.pop_back();
+                    lcd_loc(LINE2);
+                    lcd_print(currentInput + "  ");
+                } else if (k == 'A') {
+                    if (currentInput.length() > 0) {
+                        binA = currentInput;
+                        while (binA.length() < (size_t)bits) binA = "0" + binA; // padding
+                        currentState = GET_OP;
+                        currentInput = "";
+                        lcd_clear();
+                        lcd_loc(LINE1);
+                        lcd_print("1+ 2- 3* 4/ 5!");
+                    }
+                }
+            } 
+            else if (currentState == GET_OP) {
+                if (k >= '1' && k <= '5') {
+                    if (k == '1') op = "add";
+                    if (k == '2') op = "sub";
+                    if (k == '3') op = "mult";
+                    if (k == '4') op = "div";
+                    if (k == '5') op = "fat";
+                    
+                    if (op == "fat") {
+                        currentState = SHOW_RESULT;
+                    } else {
+                        currentState = GET_B;
+                        lcd_clear();
+                        lcd_loc(LINE1);
+                        lcd_print("Op B (Bin):");
+                    }
+                }
+            } 
+            else if (currentState == GET_B) {
+                if (k == '0' || k == '1') {
+                    if (currentInput.length() < (size_t)bits) currentInput += k;
+                    lcd_loc(LINE2);
+                    lcd_print(currentInput + " ");
+                } else if (k == 'B') {
+                    if (currentInput.length() > 0) currentInput.pop_back();
+                    lcd_loc(LINE2);
+                    lcd_print(currentInput + "  ");
+                } else if (k == 'A') {
+                    if (currentInput.length() > 0) {
+                        binB = currentInput;
+                        while (binB.length() < (size_t)bits) binB = "0" + binB;
+                        currentState = SHOW_RESULT;
+                    }
+                }
             }
 
-            if (currentState == 0) {
-                if ((key == '0' || key == '1') && binA.length() < BITS) {
-                    binA += key;
-                    update_display();
-                    
-                    if (binA.length() == BITS) {
-                        currentState = 1;
-                        update_display();
-                    }
+            if (currentState == SHOW_RESULT) {
+                CalcResult r = executarCalculo(binA, binB, op, bits);
+                
+                std::string l1 = decimalToBinaryString(r.resultado, bits);
+                std::string l2;
+                
+                if (r.overflow) {
+                    l2 = "OVF T:" + std::to_string(r.timeSpentMicros) + "us";
+                } else {
+                    l2 = std::to_string(binaryToDecimal(l1, bits)) + " T:" + std::to_string(r.timeSpentMicros) + "us";
                 }
-            } 
-            else if (currentState == 1) {
-                if (key == 'A' || key == 'B' || key == 'C' || key == 'D' || key == '*') {
-                    operation = key;
-                    if (operation == '*') { 
-                        calculate_and_display();
-                    } else {
-                        currentState = 2;
-                        update_display();
+                
+                // Truncar para 16 chars por causa do display
+                if (l1.length() > 16) l1 = l1.substr(0, 16);
+                if (l2.length() > 16) l2 = l2.substr(0, 16);
+
+                lcd_clear();
+                lcd_loc(LINE1);
+                lcd_print(l1.c_str());
+                lcd_loc(LINE2);
+                lcd_print(l2.c_str());
+                
+                // Aguarda a tecla A para reiniciar
+                while(true) {
+                    char k2 = keypad_scan();
+                    if (k2 == 'A') {
+                        currentState = SET_BITS;
+                        currentInput = "";
+                        lcd_clear();
+                        lcd_loc(LINE1);
+                        lcd_print("Bits (2-16):");
+                        break;
                     }
-                }
-            } 
-            else if (currentState == 2) {
-                if ((key == '0' || key == '1') && binB.length() < BITS) {
-                    binB += key;
-                    update_display();
-                    
-                    if (binB.length() == BITS) {
-                        calculate_and_display();
-                    }
+                    delay(50);
                 }
             }
         }
-        delay(30); 
+        delay(50);
     }
     return 0;
 }
