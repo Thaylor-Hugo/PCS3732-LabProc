@@ -183,3 +183,4 @@ void calculate_and_display() {
     
     // Benchmark local ARM
     auto start = std::chrono::high_resolution_clock::now();
+}
