@@ -6,8 +6,8 @@ namespace {
 constexpr char kApSsid[] = "ESP32-Grupo-H";
 constexpr char kApPassword[] = "12345678";
 
-constexpr uint8_t kLdrPin = 34;
-constexpr uint8_t kButtonPin = 12; // Pin assigned to the button
+constexpr uint8_t kLdrPin = 2;
+constexpr uint8_t kButtonPin = 3; // Pin assigned to the button
 
 WebServer server(80);
 
@@ -69,7 +69,7 @@ unsigned long trafficStateStartTime = 0;
 
 /**
  * Interrupt Service Routine (ISR) for the button press.
- * Runs on falling edge (button pressed to GND).
+ * Runs on rising edge (button pressed to 3.3v).
  */
 void IRAM_ATTR handleButtonInterrupt() {
     unsigned long currentTime = millis();
@@ -99,9 +99,9 @@ void setup() {
     Serial.println(kLdrPin);
 
     // Initialize button pin with internal pullup
-    pinMode(kButtonPin, INPUT_PULLUP);
-    // Attach falling edge interrupt to trigger handleButtonInterrupt when button goes low
-    attachInterrupt(digitalPinToInterrupt(kButtonPin), handleButtonInterrupt, FALLING);
+    pinMode(kButtonPin, INPUT_PULLDOWN);
+    // Attach rising edge interrupt to trigger handleButtonInterrupt when button goes high
+    attachInterrupt(digitalPinToInterrupt(kButtonPin), handleButtonInterrupt, RISING);
     Serial.print("Button Pin: GPIO ");
     Serial.println(kButtonPin);
 
@@ -136,7 +136,7 @@ void loop() {
         if (millis() - redStartTime >= 3000) {
             isRedActive = false;
             const int exitLuminosity = analogRead(kLdrPin);
-            if (exitLuminosity <= 1000) {
+            if (exitLuminosity >= 2800) {
                 lastBlinkTime = millis();
                 ledState = false;
                 neopixelWrite(LED_BUILTIN, 0, 0, 0);
@@ -152,7 +152,7 @@ void loop() {
     static bool wasLowLight = true;
     const int currentLuminosity = analogRead(kLdrPin);
 
-    if (currentLuminosity <= 1000) {
+    if (currentLuminosity >= 2800) {
         if (!wasLowLight) {
             wasLowLight = true;
             currentTrafficState = TRAFFIC_GREEN;

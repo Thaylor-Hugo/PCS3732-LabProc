@@ -70,8 +70,8 @@ function updateLuminosityUI(value) {
 	const voltage = ((value / 4095) * 3.3).toFixed(2);
 	ldrVoltage.textContent = `${voltage} V`;
 
-	// Theme switching threshold
-	const isDarkTheme = value < 1000;
+	// Theme switching threshold (Dim light is >= 2800)
+	const isDarkTheme = value >= 2800;
 	if (isDarkTheme) {
 		document.documentElement.classList.add('dark-theme');
 		ambientModeLabel.textContent = 'Night Mode (Dim)';
@@ -159,8 +159,8 @@ function drawChart() {
 		ctx.fillText(level, padding.left - 8, y);
 	});
 
-	// Draw threshold warning line at 1000
-	const thresholdY = padding.top + graphHeight * (1 - 1000 / 4095);
+	// Draw threshold warning line at 2800
+	const thresholdY = padding.top + graphHeight * (1 - 2800 / 4095);
 	ctx.strokeStyle = 'rgba(239, 68, 68, 0.35)';
 	ctx.lineWidth = 1.5;
 	ctx.setLineDash([4, 4]);
@@ -174,7 +174,7 @@ function drawChart() {
 	ctx.fillStyle = 'rgba(239, 68, 68, 0.7)';
 	ctx.font = '500 9px sans-serif';
 	ctx.textAlign = 'right';
-	ctx.fillText('Dark Mode Threshold (1000)', width - padding.right - 4, thresholdY - 8);
+	ctx.fillText('Dark Mode Threshold (2800)', width - padding.right - 4, thresholdY - 8);
 
 	if (historyData.length < 2) {
 		ctx.restore();
