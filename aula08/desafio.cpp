@@ -76,9 +76,9 @@ void lcd_print(std::string s) {
 // ==========================================
 // CONFIGURAÇÕES DO TECLADO MATRICIAL 4X4
 // ==========================================
-// Usando pinagem padrão do WiringPi
-const int ROW[4] = {16, 20, 21, 26}; // Pinos 11, 12, 13, 15 no Header físico (por ex)
-const int COL[4] = {19, 13, 6, 5}; // Pinos 16, 18, 22, 7 no Header físico
+// Usando numeração BCM (GPIO do Raspberry) em vez de WiringPi pinos
+const int ROW[4] = {16, 20, 21, 26}; // Linhas do teclado
+const int COL[4] = {19, 13, 6, 5}; // Colunas do teclado
 
 char keys[4][4] = {
   {'1','2','3','A'},
@@ -213,7 +213,8 @@ CalcResult executarCalculo(std::string binA, std::string binB, std::string op, i
 enum State { SET_BITS, GET_A, GET_OP, GET_B, SHOW_RESULT };
 
 int main() {
-    if (wiringPiSetup() == -1) {
+    // Usando wiringPiSetupGpio() para que a numeração BCM seja reconhecida corretamente
+    if (wiringPiSetupGpio() == -1) {
         std::cerr << "Erro ao inicializar wiringPi\n";
         return 1;
     }
