@@ -9,13 +9,13 @@
 // ==========================================
 // CONFIGURAÇÃO DO DISPLAY LCD I2C (PCF8574)
 // ==========================================
-#define I2C_ADDR 0x27 // Endereço I2C padrão (Pode ser 0x3F dependendo do display)
-#define LCD_CHR  1    // Modo de Envio de Dado (Caractere)
-#define LCD_CMD  0    // Modo de Envio de Comando
+#define I2C_ADDR 0x27 
+#define LCD_CHR  1    
+#define LCD_CMD  0    
 #define LCD_BACKLIGHT 0x08
 #define LCD_ENABLE    0b00000100
 
-int lcd_fd; // File descriptor para o barramento I2C
+int lcd_fd; 
 
 void lcd_toggle_enable(int bits) {
     delayMicroseconds(500);
@@ -42,10 +42,10 @@ void lcd_init() {
     }
     lcd_byte(0x33, LCD_CMD); 
     lcd_byte(0x32, LCD_CMD); 
-    lcd_byte(0x06, LCD_CMD); // Modo de incremento de cursor
-    lcd_byte(0x0C, LCD_CMD); // Display ON, Cursor OFF
-    lcd_byte(0x28, LCD_CMD); // Modo 4-bit, 2 linhas
-    lcd_byte(0x01, LCD_CMD); // Limpar display
+    lcd_byte(0x06, LCD_CMD); 
+    lcd_byte(0x0C, LCD_CMD); 
+    lcd_byte(0x28, LCD_CMD); 
+    lcd_byte(0x01, LCD_CMD); 
     delay(5);
 }
 
@@ -67,56 +67,63 @@ void lcd_string(const char *s) {
 // ==========================================
 // CONFIGURAÇÃO DO TECLADO MATRICIAL (Freenove)
 // ==========================================
-// Numeração BCM padrão do Raspberry Pi
 const int ROWS[4] = {16, 20, 21, 26}; 
 const int COLS[4] = {19, 13, 6, 5}; 
 
 char keys[4][4] = {
-  {'1', '2', '3', 'A'}, // A = Add (+)
-  {'4', '5', '6', 'B'}, // B = Sub (-)
-  {'7', '8', '9', 'C'}, // C = Mult (*)
-  {'*', '0', '#', 'D'}  // D = Div (/), * = Fat (!)
+  {'1', '2', '3', 'A'}, 
+  {'4', '5', '6', 'B'}, 
+  {'7', '8', '9', 'C'}, 
+  {'*', '0', '#', 'D'}  
 };
 
 void setup_keypad() {
-    // [CORREÇÃO DO RASPBERRY PI OS] 
-    // Força o acionamento do resistor de Pull-Up interno para evitar "leituras fantasmas"
+    // Força o acionamento do Pull-Up via kernel para evitar flutuação (spams)
     system("raspi-gpio set 19,13,6,5 pu 2>/dev/null || pinctrl set 19,13,6,5 pu 2>/dev/null");
 
     for (int i = 0; i < 4; i++) {
         pinMode(ROWS[i], OUTPUT);
-        digitalWrite(ROWS[i], HIGH); // Linhas começam desativadas (HIGH)
-        
+        digitalWrite(ROWS[i], HIGH); 
         pinMode(COLS[i], INPUT);
-        pullUpDnControl(COLS[i], PUD_UP); // Mantido para retrocompatibilidade
+        pullUpDnControl(COLS[i], PUD_UP); 
     }
 }
 
 char get_key() {
     for (int r = 0; r < 4; r++) {
-        digitalWrite(ROWS[r], LOW); // Ativa a linha atual (nível baixo)
+        digitalWrite(ROWS[r], LOW); 
         
+        // -------------------------------------------------------------
+        // CORREÇÃO DE SLEW RATE: Espera a voltagem física cair para 0V
+        // antes do rápido processador ARM tentar ler a coluna.
+        // -------------------------------------------------------------
+        delay(2); 
+
         for (int c = 0; c < 4; c++) {
             if (digitalRead(COLS[c]) == LOW) {
-                delay(30); // Filtro de ruído (Debounce)
+                delay(30); // Debounce mecânico
                 
-                if (digitalRead(COLS[c]) == LOW) { // Confirma o aperto
+                if (digitalRead(COLS[c]) == LOW) { 
                     char pressedKey = keys[r][c];
                     
-                    // Trava o loop até o usuário SOLTAR o botão
-                    // Isso impede o bug de imprimir a mesma tecla infinitamente
                     while(digitalRead(COLS[c]) == LOW) {
                         delay(10);
                     }
                     
-                    digitalWrite(ROWS[r], HIGH); // Restaura a linha antes de sair
+                    digitalWrite(ROWS[r], HIGH); 
+                    
+                    // Espera a voltagem subir novamente antes de sair
+                    delay(2); 
                     return pressedKey;
                 }
             }
         }
-        digitalWrite(ROWS[r], HIGH); // Desativa a linha para ler a próxima
+        digitalWrite(ROWS[r], HIGH); 
+        
+        // Garante que a linha subiu totalmente antes do loop ir para a próxima
+        delay(1); 
     }
-    return '\0'; // Nenhuma tecla pressionada
+    return '\0'; 
 }
 
 // ==========================================
@@ -128,9 +135,8 @@ const int MAX_SIGNED = 7;
 
 int binaryToDecimal(const std::string& bin) {
     int unsignedValue = std::stol(bin, nullptr, 2);
-    int signMask = 1 << (BITS - 1); // Extrai o MSB (Bit de sinal)
+    int signMask = 1 << (BITS - 1); 
     
-    // Aplica regra de Complemento de Dois se o número for negativo
     if ((unsignedValue & signMask) != 0) {
         return unsignedValue - (1 << BITS);
     }
@@ -153,11 +159,11 @@ std::string decimalToBinaryString(int value) {
 // ==========================================
 std::string binA = "", binB = "";
 char operation = ' ';
-int currentState = 0; // 0=Lendo A, 1=Lendo OpCode, 2=Lendo B, 3=Exibindo Resultado
+int currentState = 0; 
 
 void update_display() {
     lcd_clear();
-    lcd_loc(0x80); // Posiciona cursor na Linha 1
+    lcd_loc(0x80); 
 
     if (currentState == 0) {
         std::string msg = "A(4b): " + binA;
@@ -181,17 +187,16 @@ void calculate_and_display() {
     long long fullResult = 0;
     bool overflow = false;
     
-    // Benchmark local ARM
     auto start = std::chrono::high_resolution_clock::now();
 
     if (operation == 'A') { fullResult = valA + valB; }
     else if (operation == 'B') { fullResult = valA - valB; }
     else if (operation == 'C') { fullResult = valA * valB; }
     else if (operation == 'D') {
-        if (valB == 0) overflow = true; // Exceção: Divisão por Zero
+        if (valB == 0) overflow = true; 
         else fullResult = valA / valB;
     }
-    else if (operation == '*') { // Fatorial
+    else if (operation == '*') { 
         if (valA < 0) overflow = true;
         else {
             long long acc = 1;
@@ -203,15 +208,13 @@ void calculate_and_display() {
         }
     }
 
-    // Checagem global de limite (Overflow)
     if (fullResult < MIN_SIGNED || fullResult > MAX_SIGNED) overflow = true;
     
     auto end = std::chrono::high_resolution_clock::now();
     long long timeSpent = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-    // Renderização do Resultado Final
     lcd_clear();
-    lcd_loc(0x80); // Linha 1
+    lcd_loc(0x80); 
     if (overflow && operation == 'D' && valB == 0) {
         lcd_string("Erro: Div/0");
     } else if (overflow) {
@@ -220,18 +223,17 @@ void calculate_and_display() {
         std::string binRes = "Res: " + decimalToBinaryString(fullResult);
         lcd_string(binRes.c_str());
         
-        lcd_loc(0xC0); // Linha 2
+        lcd_loc(0xC0); 
         std::string decTimeRes = "D:" + std::to_string(fullResult) + " T:" + std::to_string(timeSpent) + "us";
         lcd_string(decTimeRes.c_str());
     }
-    currentState = 3; // Aguarda o usuário apertar '#' para resetar
+    currentState = 3; 
 }
 
 // ==========================================
 // LOOP PRINCIPAL (Baremetal/Standalone)
 // ==========================================
 int main() {
-    // Inicializa a WiringPi usando a numeração BCM
     if (wiringPiSetupGpio() == -1) {
         std::cerr << "Erro ao inicializar WiringPi! Execute com 'sudo'." << std::endl;
         return 1;
@@ -240,13 +242,12 @@ int main() {
     lcd_init();
     setup_keypad();
     
-    update_display(); // Desenha a tela inicial
+    update_display(); 
 
     while (true) {
         char key = get_key();
         
         if (key != '\0') {
-            // A tecla '#' atua como RESET em qualquer estado do sistema
             if (key == '#') { 
                 binA = ""; binB = ""; operation = ' ';
                 currentState = 0;
@@ -255,7 +256,6 @@ int main() {
             }
 
             if (currentState == 0) {
-                // Aceita apenas '0' ou '1' (Binário) limitando a 4 bits
                 if ((key == '0' || key == '1') && binA.length() < BITS) {
                     binA += key;
                     update_display();
@@ -270,7 +270,6 @@ int main() {
                 if (key == 'A' || key == 'B' || key == 'C' || key == 'D' || key == '*') {
                     operation = key;
                     if (operation == '*') { 
-                        // Fatorial ignora o operando B e calcula direto
                         calculate_and_display();
                     } else {
                         currentState = 2;
@@ -279,7 +278,6 @@ int main() {
                 }
             } 
             else if (currentState == 2) {
-                // Aceita apenas '0' ou '1' (Binário) limitando a 4 bits
                 if ((key == '0' || key == '1') && binB.length() < BITS) {
                     binB += key;
                     update_display();
@@ -290,7 +288,7 @@ int main() {
                 }
             }
         }
-        delay(30); // Alivia a carga de processamento na CPU do Raspberry
+        delay(30); 
     }
     return 0;
 }
