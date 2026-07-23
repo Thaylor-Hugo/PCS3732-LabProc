@@ -32,6 +32,7 @@ def main():
             for drive_pin in PINS:
                 inputs[drive_pin].close()
                 driver = DigitalOutputDevice(drive_pin, initial_value=False)
+                time.sleep(0.005)  # acomodação: linha precisa assentar em LOW
 
                 for sense_pin in PINS:
                     if sense_pin == drive_pin:
@@ -41,6 +42,7 @@ def main():
 
                 driver.close()
                 inputs[drive_pin] = DigitalInputDevice(drive_pin, pull_up=True)
+                time.sleep(0.005)  # acomodação: pull-up fraco precisa subir a HIGH
             time.sleep(0.15)
     except KeyboardInterrupt:
         print("\nInterrompido pelo usuario.")
