@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Driver de varredura do teclado matricial 4x4, com debounce por software.
 
-Usa `gpiozero.DigitalOutputDevice` para as linhas e
-`gpiozero.DigitalInputDevice` (pull-up interno) para as colunas, no mesmo
-estilo dos demais scripts do kit Freenove FNK0054.
+Usa `gpiozero.DigitalOutputDevice` para as colunas e
+`gpiozero.DigitalInputDevice` (pull-up interno) para as linhas — mesma
+estratégia de varredura do exemplo de referência que funciona no hardware
+(`MatrixKeypad.py`/`Keypad.py`, freenove FNK0054): apenas UMA coluna é
+colocada em nível baixo por vez; se alguma linha também estiver em nível
+baixo, a tecla correspondente foi pressionada.
 
-Estratégia de varredura (RF01 — "captura exata sem bouncing de teclas"):
-a cada `scan()`, apenas UMA linha é colocada em nível baixo por vez; se
-alguma coluna também estiver em nível baixo, a tecla correspondente foi
-pressionada. Um evento só é reportado uma vez por pressionamento: a tecla
-tem que voltar a "solta" antes de gerar um novo evento (`_last_key`), e uma
-tecla recém detectada só é confirmada após `debounce_s` permanecer estável
-(RF01/funil de depuração do PDF: "delay de 50ms na varredura").
+Um evento só é reportado uma vez por pressionamento: a tecla tem que voltar
+a "solta" antes de gerar um novo evento (`_last_key`), e uma tecla recém
+detectada só é confirmada após `debounce_s` permanecer estável (RF01/funil
+de depuração do PDF: "delay de 50ms na varredura").
 """
 
 import time
@@ -23,8 +23,8 @@ from config import KEYPAD_COL_PINS, KEYPAD_DEBOUNCE_S, KEYPAD_LAYOUT, KEYPAD_ROW
 
 class Keypad:
     def __init__(self, row_pins=None, col_pins=None, layout=None, debounce_s=None):
-        self.rows = [DigitalOutputDevice(pin, initial_value=True) for pin in (row_pins or KEYPAD_ROW_PINS)]
-        self.cols = [DigitalInputDevice(pin, pull_up=True) for pin in (col_pins or KEYPAD_COL_PINS)]
+        self.rows = [DigitalInputDevice(pin, pull_up=True) for pin in (row_pins or KEYPAD_ROW_PINS)]
+        self.cols = [DigitalOutputDevice(pin, initial_value=True) for pin in (col_pins or KEYPAD_COL_PINS)]
         self.layout = layout or KEYPAD_LAYOUT
         self.debounce_s = debounce_s if debounce_s is not None else KEYPAD_DEBOUNCE_S
 
@@ -34,13 +34,13 @@ class Keypad:
 
     def _raw_scan(self):
         """Retorna a tecla atualmente pressionada (ou None), sem debounce."""
-        for row_index, row in enumerate(self.rows):
-            row.off()  # nível baixo apenas na linha sob teste
-            for col_index, col in enumerate(self.cols):
-                if col.value:  # pull_up=True: gpiozero já inverte, pressionado = value True
-                    row.on()
+        for col_index, col in enumerate(self.cols):
+            col.off()  # nível baixo apenas na coluna sob teste
+            for row_index, row in enumerate(self.rows):
+                if row.value:  # pull_up=True: gpiozero já inverte, pressionado = value True
+                    col.on()
                     return self.layout[row_index][col_index]
-            row.on()
+            col.on()
         return None
 
     def scan(self):

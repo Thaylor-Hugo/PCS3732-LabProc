@@ -14,10 +14,11 @@ Referência de capítulos do kit (docs.freenove.com/projects/fnk0054):
 """
 
 # --- Teclado matricial 4x4 -------------------------------------------------
-# Linhas = saídas (uma por vez em nível baixo), colunas = entradas com
-# pull-up interno (nível baixo = tecla pressionada).
-KEYPAD_ROW_PINS = [5, 6, 13, 19]
-KEYPAD_COL_PINS = [26, 21, 20, 16]
+# Colunas = saídas (uma por vez em nível baixo), linhas = entradas com
+# pull-up interno (nível baixo = tecla pressionada). Pinagem confirmada
+# funcional em MatrixKeypad.py/Keypad.py (referência freenove).
+KEYPAD_ROW_PINS = [16, 20, 21, 26]
+KEYPAD_COL_PINS = [19, 13, 6, 5]
 KEYPAD_LAYOUT = [
     ["1", "2", "3", "A"],
     ["4", "5", "6", "B"],

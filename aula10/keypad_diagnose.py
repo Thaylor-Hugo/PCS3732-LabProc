@@ -37,7 +37,7 @@ def main():
                 for sense_pin in PINS:
                     if sense_pin == drive_pin:
                         continue
-                    if not inputs[sense_pin].value:
+                    if inputs[sense_pin].value:  # pull_up=True: gpiozero já inverte, curto = value True
                         print(f"[Diagnóstico] driver={drive_pin}  <->  sensor={sense_pin}")
 
                 driver.close()
