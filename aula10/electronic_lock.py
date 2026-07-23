@@ -64,6 +64,7 @@ class ElectronicLock:
         self.state_until = None     # timestamp de expiração do estado atual (UNLOCKED/COOLDOWN)
         self._next_sensor_poll = 0.0
         self._physical_locked = True
+        self._pending_relock = False   # UNLOCKED expirou, aguardando sensor confirmar porta fechada
 
         self._render()
 
@@ -75,6 +76,15 @@ class ElectronicLock:
 
         distance_cm = self.sensor.distance * 100
         self._physical_locked = distance_cm <= SENSOR_LOCKED_MAX_CM
+
+        # Auto-relock só arma o alarme quando a porta realmente fechou:
+        # o timeout do UNLOCKED apenas marca a intenção de trancar
+        # (_pending_relock); a transição para LOCKED espera o sensor.
+        if self._pending_relock and self._physical_locked:
+            self._pending_relock = False
+            self.state = STATE_LOCKED
+            self._render()
+            return
 
         # RF3: se o sistema acredita estar TRANCADO mas o sensor detecta a
         # lingueta ausente (abertura forçada), dispara alerta.
@@ -122,6 +132,7 @@ class ElectronicLock:
                 self.state_until = now + COOLDOWN_S
             else:
                 self.state = STATE_LOCKED
+        self._pending_relock = False
         self.buffer = ""
 
     # -- transições dependentes de tempo -----------------------------------
@@ -130,7 +141,10 @@ class ElectronicLock:
             return
         self.state_until = None
         if self.state == STATE_UNLOCKED:
-            self.state = STATE_LOCKED
+            if self._physical_locked:
+                self.state = STATE_LOCKED
+            else:
+                self._pending_relock = True    # espera o sensor confirmar antes de rearmar
         elif self.state == STATE_COOLDOWN:
             self.failed_attempts = 0
             self.state = STATE_LOCKED
@@ -142,7 +156,10 @@ class ElectronicLock:
             masked = "*" * len(self.buffer)
             self.lcd.write_status("STATUS: Trancada", masked or "Digite a senha")
         elif self.state == STATE_UNLOCKED:
-            self.lcd.write_status("STATUS: Aberto", "Bem-vindo!")
+            if self._pending_relock:
+                self.lcd.write_status("Feche a porta", "para travar")
+            else:
+                self.lcd.write_status("STATUS: Aberto", "Bem-vindo!")
         elif self.state == STATE_COOLDOWN:
             remaining = max(0, int((self.state_until or 0) - time.monotonic()))
             self.lcd.write_status("Bloqueado", f"Aguarde {remaining}s")
