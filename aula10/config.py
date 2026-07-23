@@ -57,3 +57,4 @@ AUTO_RELOCK_S = 5.0           # tempo em "Aberto" antes de retrancar automaticam
 
 MAIN_LOOP_INTERVAL_S = 0.02   # 20ms: garante teclado responsivo e LCD < 200ms (RF2)
 KEYPAD_DEBOUNCE_S = 0.05      # 50ms, conforme funil de depuração do PDF
+
