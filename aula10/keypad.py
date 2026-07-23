@@ -37,7 +37,7 @@ class Keypad:
         for row_index, row in enumerate(self.rows):
             row.off()  # nível baixo apenas na linha sob teste
             for col_index, col in enumerate(self.cols):
-                if not col.value:  # pull-up: pressionado = nível baixo
+                if col.value:  # pull_up=True: gpiozero já inverte, pressionado = value True
                     row.on()
                     return self.layout[row_index][col_index]
             row.on()
